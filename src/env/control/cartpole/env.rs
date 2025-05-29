@@ -4,11 +4,7 @@ use crate::{
     spaces::{Boxed, EnvSpace, Mixed, MixedItem, Space},
 };
 use nalgebra::SVector;
-use rand::{
-    SeedableRng,
-    distr::{Distribution, Uniform},
-    rngs::StdRng,
-};
+
 
 const FOUR_THIRDS: f64 = 4.0 / 3.0;
 const STATE_SIZE: usize = 4;

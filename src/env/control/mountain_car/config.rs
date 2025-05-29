@@ -1,10 +1,10 @@
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum MountainCarReward {
     Constant,
     ActionPenalty,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MountainCarConfig {
     pub f: f64,
     pub g: f64,

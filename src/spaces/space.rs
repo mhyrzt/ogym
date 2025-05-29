@@ -9,7 +9,7 @@ pub trait Space {
     fn bounds(&self) -> (Self::Item, Self::Item);
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EnvSpace<S: Space, A: Space> {
     pub state: S,
     pub action: A,

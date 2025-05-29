@@ -1,6 +1,6 @@
 use super::{MountainCarConfig, config::MountainCarReward};
 use crate::{
-    env::{Environment, Error},
+    env::{Environment, Error, StepResult},
     spaces::{Boxed, EnvSpace, Mixed, MixedItem, Space},
 };
 use nalgebra::SVector;
@@ -83,7 +83,7 @@ impl Environment for MountainCar {
     fn step(
         &mut self,
         action: Self::Action,
-    ) -> Result<crate::env::StepResult<Self::State, Self::Info>, Error> {
+    ) -> Result<StepResult<Self::State, Self::Info>, Error> {
         if self.is_done()? {
             return Err(Error::EpisodeDone);
         }
