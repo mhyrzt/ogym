@@ -6,7 +6,7 @@ mod tests {
     use crate::{
         env::{
             Environment,
-            control::cartpole::{CartPole, CartPoleConfig},
+            control::cart_pole::{CartPole, CartPoleConfig},
         },
         spaces::Space,
     };

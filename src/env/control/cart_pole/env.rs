@@ -5,7 +5,6 @@ use crate::{
 };
 use nalgebra::SVector;
 
-
 const FOUR_THIRDS: f64 = 4.0 / 3.0;
 const STATE_SIZE: usize = 4;
 const ACTION_SIZE: usize = 1;
@@ -26,6 +25,8 @@ pub struct CartPole {
 
 impl CartPole {
     pub fn new(config: CartPoleConfig) -> Result<Self, Error> {
+        // The formulas for v_max and omega_max are derived based on energy conservation principles.
+        // For a detailed explanation and derivation, see: https://chatgpt.com/share/68387c8f-2298-800e-bfd1-b9af501d3b30
         let m = config.mc + config.mp;
         let high: State = SVector::from_vec(vec![
             config.x_max * 2.0,
