@@ -1,5 +1,5 @@
-mod env;
-mod spaces;
+pub mod env;
+pub mod spaces;
 
 #[cfg(test)]
 mod tests {
