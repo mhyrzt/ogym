@@ -1,41 +1,31 @@
-use super::space::Space;
+use super::{error::Error, space::Space};
 use rand::Rng;
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum DiscreteSpaceError {
-    #[error("size must be greater than one")]
-    InvalidSize,
-    #[error("the given value is not in bound")]
-    NotInBound,
-}
 
 #[derive(Debug)]
-pub struct DiscreteSpace {
+pub struct Discrete {
     n: u32,
 }
 
-impl DiscreteSpace {
-    pub fn new(n: u32) -> Result<Self, DiscreteSpaceError> {
+impl Discrete {
+    pub fn new(n: u32) -> Result<Self, Error> {
         match n > 1 {
-            true => Ok(DiscreteSpace { n }),
-            false => Err(DiscreteSpaceError::InvalidSize),
+            true => Ok(Discrete { n }),
+            false => Err(Error::DiscreteInvalidSize),
         }
     }
 }
 
-impl Space for DiscreteSpace {
+impl Space for Discrete {
     type Item = u32;
-    type Error = DiscreteSpaceError;
 
-    fn sample(&self) -> Result<Self::Item, Self::Error> {
+    fn sample(&self) -> Result<Self::Item, Error> {
         Ok(rand::rng().random_range(0..self.n))
     }
 
-    fn contains(&self, value: &Self::Item) -> Result<(), Self::Error> {
+    fn contains(&self, value: &Self::Item) -> Result<(), Error> {
         match *value < self.n {
             true => Ok(()),
-            false => Err(DiscreteSpaceError::NotInBound),
+            false => Err(Error::InvalidBounds),
         }
     }
 

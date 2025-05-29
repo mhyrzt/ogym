@@ -1,14 +1,9 @@
 use super::config::{CartPoleConfig, KinematicsIntegrator};
-use super::error::CartPoleError;
 use crate::{
-    env::Environment,
-    spaces::{
-        continuous::{ContinuousSpace, ContinuousSpaceError},
-        discrete::{DiscreteSpace, DiscreteSpaceError},
-        space::{EnvSpace, Space},
-    },
+    env::{Environment, Error},
+    spaces::{Boxed, EnvSpace, Mixed, MixedItem, Space},
 };
-use nalgebra::DVector;
+use nalgebra::SVector;
 use rand::{
     SeedableRng,
     distr::{Distribution, Uniform},
@@ -16,28 +11,40 @@ use rand::{
 };
 
 const FOUR_THIRDS: f64 = 4.0 / 3.0;
+const STATE_SIZE: usize = 4;
+const ACTION_SIZE: usize = 1;
 
+type Action = MixedItem<ACTION_SIZE>;
+type ActionSpace = Mixed<ACTION_SIZE>;
+
+type State = SVector<f64, STATE_SIZE>;
+type StateSpace = Boxed<STATE_SIZE>;
+
+#[derive(Debug)]
 pub struct CartPole {
     t: u32,
     config: CartPoleConfig,
-    state: Option<DVector<f64>>,
-    pub space: EnvSpace<ContinuousSpace, DiscreteSpace>,
+    state: Option<State>,
+    pub space: EnvSpace<StateSpace, ActionSpace>,
 }
 
 impl CartPole {
-    pub fn new() -> Result<Self, CartPoleError> {
-        let config = CartPoleConfig::default();
-
-        let high: DVector<f64> = DVector::from_vec(vec![
+    pub fn new(config: CartPoleConfig) -> Result<Self, Error> {
+        let m = config.mc + config.mp;
+        let high: State = SVector::from_vec(vec![
             config.x_max * 2.0,
-            f64::INFINITY,
+            (2.0 * config.f * config.x_max / m).sqrt(),
             config.theta_max * 2.0,
-            f64::INFINITY,
+            ((2.0 * config.f * config.theta_max) / (config.l * (FOUR_THIRDS - config.mp / m)))
+                .sqrt(),
         ]);
 
         let space = EnvSpace {
-            state: ContinuousSpace::new(-high.clone(), high)?,
-            action: DiscreteSpace::new(2)?,
+            state: Boxed::new(-high, high)?,
+            action: match config.continuous {
+                false => Mixed::discrete(2)?,
+                true => Mixed::continuous(SVector::from_element(-1.0), SVector::from_element(1.0))?,
+            },
         };
         Ok(CartPole {
             space,
@@ -47,18 +54,16 @@ impl CartPole {
         })
     }
 
-    fn compute_acceleration(&self, state: &DVector<f64>, force: &f64) -> (f64, f64) {
+    fn compute_acceleration(&self, state: &State, force: &f64) -> (f64, f64) {
         let theta: f64 = state[2];
         let omega: f64 = state[3];
 
-        let sin_theta: f64 = theta.sin();
-        let cos_theta: f64 = theta.cos();
-        let omega_sq: f64 = omega.powi(2);
+        let (sin_theta, cos_theta) = theta.sin_cos();
 
         let m: f64 = self.config.mc + self.config.mp;
         let mpl: f64 = self.config.mp * self.config.l;
 
-        let t: f64 = (force + mpl * omega_sq * sin_theta) / m;
+        let t: f64 = (force + mpl * omega.powi(2) * sin_theta) / m;
 
         let num: f64 = self.config.g * sin_theta - cos_theta * t;
         let den: f64 = self.config.l * (FOUR_THIRDS - self.config.mp * cos_theta.powi(2) / m);
@@ -68,12 +73,12 @@ impl CartPole {
         (x_acc, theta_acc)
     }
 
-    fn euler(&self, state: &DVector<f64>, x_acc: &f64, theta_acc: &f64) -> DVector<f64> {
+    fn euler(&self, state: &State, x_acc: &f64, theta_acc: &f64) -> State {
         let x = state[0];
         let v = state[1];
         let theta = state[2];
         let omega = state[3];
-        DVector::from_vec(vec![
+        SVector::from_vec(vec![
             x + self.config.tau * v,
             v + self.config.tau * x_acc,
             theta + self.config.tau * omega,
@@ -81,17 +86,12 @@ impl CartPole {
         ])
     }
 
-    fn semi_implicit_euler(
-        &self,
-        state: &DVector<f64>,
-        x_acc: &f64,
-        theta_acc: &f64,
-    ) -> DVector<f64> {
+    fn semi_implicit_euler(&self, state: &State, x_acc: &f64, theta_acc: &f64) -> State {
         let x = state[0];
         let v = state[1] + self.config.tau * x_acc;
         let theta = state[2];
         let omega = state[3] + self.config.tau * theta_acc;
-        DVector::from_vec(vec![
+        SVector::from_vec(vec![
             x + self.config.tau * v,
             v,
             theta + self.config.tau * omega,
@@ -99,7 +99,7 @@ impl CartPole {
         ])
     }
 
-    fn integrate(&self, state: &DVector<f64>, force: &f64) -> DVector<f64> {
+    fn integrate(&self, state: &State, force: &f64) -> State {
         let (x_acc, theta_acc) = self.compute_acceleration(state, force);
         match self.config.integrator {
             KinematicsIntegrator::Euler => self.euler(state, &x_acc, &theta_acc),
@@ -108,60 +108,62 @@ impl CartPole {
             }
         }
     }
+
+    fn force(&self, action: Action) -> Result<f64, Error> {
+        match (&self.space.action, action) {
+            (Mixed::Discrete(space), Action::Discrete(act)) => {
+                space.contains(&act).map_err(|_| Error::InvalidAction)?;
+                Ok((2.0 * act as f64 - 1.0) * self.config.f)
+            }
+            (Mixed::Continuous(space), Action::Continuous(act)) => {
+                space.contains(&act).map_err(|_| Error::InvalidAction)?;
+                Ok(act[0] * self.config.f)
+            }
+            _ => Err(Error::InvalidAction),
+        }
+    }
 }
 
 impl Environment for CartPole {
-    type Action = u32;
-    type State = DVector<f64>;
-    type Info = Option<String>;
-    type Error = CartPoleError;
-    type ActionError = DiscreteSpaceError;
-    type StateError = ContinuousSpaceError;
-    type ActionSpace = DiscreteSpace;
-    type StateSpace = ContinuousSpace;
+    type Action = Action;
+    type State = State;
+    type Info = Option<()>;
 
-    fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Self::Error> {
+    fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
+        let state = self.space.state.uniform(seed, -5e-2, 5e-2)?;
         self.t = 0;
-        let mut rng = match seed {
-            Some(state) => StdRng::seed_from_u64(state),
-            None => StdRng::from_rng(&mut rand::rng()),
-        };
-        let size = self.space.state.low.len();
-        let range = Uniform::new(-0.05, 0.05)?;
-        let data: Vec<f64> = (0..size).map(|_| range.sample(&mut rng)).collect();
-        let state = DVector::from_vec(data);
-        self.state = Some(state.clone());
+        self.state = Some(state);
         Ok((state, None))
     }
 
     fn step(
         &mut self,
         action: Self::Action,
-    ) -> Result<(Self::State, f64, bool, Self::Info), Self::Error> {
-        self.space.action.contains(&action)?;
+    ) -> Result<(Self::State, f64, bool, Self::Info), Error> {
         if self.is_done()? {
-            return Err(CartPoleError::EpisodeDone);
+            return Err(Error::EpisodeDone);
         }
+
         let state = self.state()?;
-        let force: f64 = (2.0 * action as f64 - 1.0) * self.config.f;
-        self.t += 1;
+        let force: f64 = self.force(action)?;
         let new_state = self.integrate(&state, &force);
-        self.state = Some(new_state.clone());
+        self.state = Some(new_state);
+        self.t += 1;
 
         Ok((new_state, 1.0, self.is_done()?, None))
     }
 
-    fn is_done(&self) -> Result<bool, Self::Error> {
+    fn is_done(&self) -> Result<bool, Error> {
         let state = self.state()?;
         Ok(self.t > self.config.t_max
             || state[0].abs() > self.config.x_max
             || state[2].abs() > self.config.theta_max)
     }
 
-    fn state(&self) -> Result<Self::State, Self::Error> {
-        match &self.state {
-            Some(s) => Ok(s.clone()),
-            None => Err(CartPoleError::NotInitialized),
+    fn state(&self) -> Result<Self::State, Error> {
+        match self.state {
+            Some(s) => Ok(s),
+            None => Err(Error::NotInitialized),
         }
     }
 }

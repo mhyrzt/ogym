@@ -1,5 +1,10 @@
-pub mod continuous;
-pub mod discrete;
-pub mod space;
+mod boxed;
+mod discrete;
+mod error;
+mod mixed;
+mod space;
 
-
+pub use boxed::Boxed;
+pub use error::Error;
+pub use mixed::{Mixed, MixedItem};
+pub use space::{EnvSpace, Space};

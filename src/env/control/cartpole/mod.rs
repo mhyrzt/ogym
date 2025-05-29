@@ -1,3 +1,4 @@
-pub mod config;
-pub mod env;
-pub mod error;
+mod config;
+mod env;
+pub use config::CartPoleConfig;
+pub use env::CartPole;
