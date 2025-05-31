@@ -1,6 +1,5 @@
 use std::f64::consts::PI;
 
-use nalgebra::SVector;
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum DynamicsMode {
@@ -21,11 +20,9 @@ pub struct AcrobotConfig {
     pub link_moi: f64,
     pub max_vel_1: f64,
     pub max_vel_2: f64,
-    pub avail_torque: SVector<f64, 3>,
     pub torque_noise_max: f64,
     pub dynamics_mode: DynamicsMode,
     pub continuous: bool,
-    pub actions_num: u32,
     pub max_t: u32,
 }
 
@@ -43,11 +40,9 @@ impl Default for AcrobotConfig {
             link_moi: 1.0,
             max_vel_1: 4.0 * PI,
             max_vel_2: 9.0 * PI,
-            avail_torque: SVector::from_vec(vec![-1.0, 0.0, 1.0]),
             torque_noise_max: 0.0,
             dynamics_mode: DynamicsMode::Book,
             continuous: false,
-            actions_num: 3,
             max_t: 500,
         }
     }
@@ -97,13 +92,8 @@ impl AcrobotConfig {
         self
     }
 
-    pub fn with_avail_torque(mut self, torque: SVector<f64, 3>) -> Self {
-        self.avail_torque = torque;
-        self
-    }
-
     pub fn with_torque_noise(mut self, noise: f64) -> Self {
-        self.torque_noise_max = noise;
+        self.torque_noise_max = noise.abs();
         self
     }
 
@@ -122,9 +112,8 @@ impl AcrobotConfig {
         self
     }
 
-    pub fn with_discrete_action(mut self, n: u32) -> Self {
+    pub fn with_discrete_action(mut self) -> Self {
         self.continuous = false;
-        self.actions_num = n;
         self
     }
 

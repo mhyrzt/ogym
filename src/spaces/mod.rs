@@ -3,6 +3,7 @@ mod discrete;
 mod error;
 mod mixed;
 mod space;
+mod multi_discrete;
 
 pub use boxed::Boxed;
 pub use error::Error;

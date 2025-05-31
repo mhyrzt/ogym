@@ -5,6 +5,9 @@ pub enum Error {
     )]
     ShapeMismatch,
 
+    #[error("Space vector can not be empty")]
+    EmptyVec,
+
     #[error("Type Mismatch")]
     TypeMismatch,
 
