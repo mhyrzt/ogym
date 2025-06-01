@@ -1,6 +1,6 @@
 use super::config::{CartPoleConfig, KinematicsIntegrator};
 use crate::{
-    env::{Environment, Error},
+    env::environment::{Environment, Error, Experience, Terminal},
     spaces::{Boxed, EnvSpace, Mixed, MixedItem, Space},
 };
 use nalgebra::SVector;
@@ -106,14 +106,14 @@ impl CartPole {
         }
     }
 
-    fn force(&self, action: Action) -> Result<f64, Error> {
+    fn force(&self, action: &Action) -> Result<f64, Error> {
         match (&self.space.action, action) {
             (Mixed::Discrete(space), Action::Discrete(act)) => {
-                space.contains(&act).map_err(|_| Error::InvalidAction)?;
-                Ok((2.0 * act as f64 - 1.0) * self.config.f)
+                space.contains(act).map_err(|_| Error::InvalidAction)?;
+                Ok((2.0 * *act as f64 - 1.0) * self.config.f)
             }
             (Mixed::Continuous(space), Action::Continuous(act)) => {
-                space.contains(&act).map_err(|_| Error::InvalidAction)?;
+                space.contains(act).map_err(|_| Error::InvalidAction)?;
                 Ok(act[0] * self.config.f)
             }
             _ => Err(Error::InvalidAction),
@@ -124,37 +124,38 @@ impl CartPole {
 impl Environment for CartPole {
     type Action = Action;
     type State = State;
-    type Info = Option<()>;
+    type Info = ();
 
     fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
         let state = self.space.state.uniform(seed, -5e-2, 5e-2)?;
         self.t = 0;
         self.state = Some(state);
-        Ok((state, None))
+        Ok((state, ()))
     }
 
     fn step(
         &mut self,
         action: Self::Action,
-    ) -> Result<(Self::State, f64, bool, Self::Info), Error> {
+    ) -> Result<Experience<Self::State, Self::Info, self::Action>, Error> {
         if self.is_done()? {
             return Err(Error::EpisodeDone);
         }
 
-        let state = self.state()?;
-        let force: f64 = self.force(action)?;
-        let new_state = self.integrate(&state, &force);
-        self.state = Some(new_state);
+        let curr_state = self.state()?;
+        let force: f64 = self.force(&action)?;
+        let next_state = self.integrate(&curr_state, &force);
+        self.state = Some(next_state);
         self.t += 1;
 
-        Ok((new_state, 1.0, self.is_done()?, None))
-    }
-
-    fn is_done(&self) -> Result<bool, Error> {
-        let state = self.state()?;
-        Ok(self.t > self.config.t_max
-            || state[0].abs() > self.config.x_max
-            || state[2].abs() > self.config.theta_max)
+        Ok(Experience::new(
+            curr_state,
+            -1.,
+            action,
+            next_state,
+            (),
+            self.to_terminal()?,
+            self.t,
+        ))
     }
 
     fn state(&self) -> Result<Self::State, Error> {
@@ -162,5 +163,14 @@ impl Environment for CartPole {
             Some(s) => Ok(s),
             None => Err(Error::NotInitialized),
         }
+    }
+
+    fn is_terminal(&self) -> Result<bool, Error> {
+        let state = self.state()?;
+        Ok(state[0].abs() > self.config.x_max || state[2].abs() > self.config.theta_max)
+    }
+
+    fn is_truncated(&self) -> bool {
+        self.t >= self.config.t_max
     }
 }

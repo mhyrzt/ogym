@@ -9,7 +9,7 @@ pub struct Discrete {
 impl Discrete {
     pub fn new(n: u32) -> Result<Self, Error> {
         match n > 1 {
-            true => Ok(Discrete { n }),
+            true => Ok(Self { n }),
             false => Err(Error::DiscreteInvalidSize),
         }
     }

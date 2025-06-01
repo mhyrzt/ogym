@@ -5,10 +5,7 @@ pub mod spaces;
 #[cfg(test)]
 mod tests {
     use crate::{
-        env::{
-            Environment,
-            control::cart_pole::{CartPole, CartPoleConfig},
-        },
+        env::control::cart_pole::{CartPole, CartPoleConfig},
         spaces::Space,
     };
 

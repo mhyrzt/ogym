@@ -1,8 +1,8 @@
-use std::{f64::consts::PI, os::linux::raw::stat};
+use std::f64::consts::{PI, TAU};
 
 use super::PendulumConfig;
 use crate::{
-    env::{Environment, Error},
+    env::environment::{Environment, Error, Experience},
     spaces::{Boxed, EnvSpace, Mixed, MixedItem, Space},
 };
 use nalgebra::SVector;
@@ -18,7 +18,7 @@ type State = SVector<f64, STATE_SIZE>;
 type StateSpace = Boxed<STATE_SIZE>;
 
 fn normalize_angle(x: f64) -> f64 {
-    (x + PI).rem_euclid(2. * PI) - PI
+    (x + PI).rem_euclid(TAU) - PI
 }
 
 #[derive(Debug)]
@@ -76,10 +76,7 @@ impl Environment for Pendulum {
 
     fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
         self.t = 0;
-        let (theta, omega) = self.rand_theta_omega(seed);
-        let (ts, tc) = theta.sin_cos();
-        self.theta = theta;
-        self.omega = omega;
+        (self.theta, self.omega) = self.rand_theta_omega(seed);
         let s = self.to_state();
         self.state = Some(s);
         Ok((s, ()))
@@ -88,7 +85,7 @@ impl Environment for Pendulum {
     fn step(
         &mut self,
         action: Self::Action,
-    ) -> Result<crate::env::StepResult<Self::State, Self::Info>, Error> {
+    ) -> Result<Experience<Self::State, Self::Info, Self::Action>, Error> {
         self.state()?;
         self.space.action.contains(&action)?;
         if self.is_done()? {
@@ -116,15 +113,20 @@ impl Environment for Pendulum {
 
         self.theta += self.omega * dt;
 
-        let state = self.to_state();
-        self.state = Some(state);
+        let curr_state = self.state()?;
+        let next_state = self.to_state();
+        self.state = Some(next_state);
         self.t += 1;
-        
-        Ok((state, -cost, self.is_done()?, ()))
-    }
 
-    fn is_done(&self) -> Result<bool, Error> {
-        Ok(self.t > self.config.max_t)
+        Ok(Experience::new(
+            curr_state,
+            -cost,
+            action,
+            next_state,
+            (),
+            self.to_terminal()?,
+            self.t,
+        ))
     }
 
     fn state(&self) -> Result<Self::State, Error> {
@@ -132,5 +134,13 @@ impl Environment for Pendulum {
             Some(s) => Ok(s),
             None => Err(Error::NotInitialized),
         }
+    }
+
+    fn is_terminal(&self) -> Result<bool, Error> {
+        Ok(false)
+    }
+
+    fn is_truncated(&self) -> bool {
+        self.t >= self.config.max_t
     }
 }

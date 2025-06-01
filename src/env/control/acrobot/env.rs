@@ -1,6 +1,4 @@
-use std::{
-    f64::consts::{PI, TAU},
-};
+use std::f64::consts::{PI, TAU};
 
 use nalgebra::SVector;
 use rand::{
@@ -10,7 +8,7 @@ use rand::{
 };
 
 use crate::{
-    env::{Environment, Error, StepResult},
+    env::environment::{Environment, Error, Experience, Terminal},
     spaces::{Boxed, EnvSpace, Mixed, MixedItem, Space},
 };
 
@@ -61,14 +59,14 @@ impl Acrobot {
         }
     }
 
-    fn tau(&self, action: Action) -> Result<f64, Error> {
+    fn tau(&self, action: &Action) -> Result<f64, Error> {
         let mut tau = match (&self.space.action, action) {
             (Mixed::Discrete(space), MixedItem::Discrete(act)) => {
-                space.contains(&act).map_err(|_| Error::InvalidAction)?;
-                (act - 1) as f64
+                space.contains(act).map_err(|_| Error::InvalidAction)?;
+                (*act - 1) as f64
             }
             (Mixed::Continuous(space), MixedItem::Continuous(act)) => {
-                space.contains(&act).map_err(|_| Error::InvalidAction)?;
+                space.contains(act).map_err(|_| Error::InvalidAction)?;
                 act[0]
             }
             _ => return Err(Error::InvalidAction),
@@ -79,11 +77,6 @@ impl Acrobot {
                 .random_range(-self.config.torque_noise_max..self.config.torque_noise_max);
         }
         Ok(tau)
-    }
-
-    fn is_goal(&self) -> Result<bool, Error> {
-        let s = self.raw()?;
-        Ok(s[0].cos() + (s[0] + s[1]).cos() < -1.)
     }
 
     fn ds_dt(&self, state: RawState, tau: f64) -> SVector<f64, RAW_STATE_SIZE> {
@@ -166,24 +159,30 @@ impl Environment for Acrobot {
         Ok((self.state()?, ()))
     }
 
-    fn step(&mut self, action: Self::Action) -> Result<StepResult<Self::State, Self::Info>, Error> {
+    fn step(
+        &mut self,
+        action: Self::Action,
+    ) -> Result<Experience<Self::State, Self::Info, Self::Action>, Error> {
         if self.is_done()? {
             return Err(Error::EpisodeDone);
         }
-        self.raw_state = Some(self.rk4(self.raw()?, self.tau(action)?));
 
-        let reward = match self.is_goal()? {
-            true => 0.0,
-            false => -1.0,
-        };
+        let curr_state = self.state()?;
+
+        self.raw_state = Some(self.rk4(self.raw()?, self.tau(&action)?));
+        let next_state = self.state()?;
 
         self.t += 1;
 
-        Ok((self.state()?, reward, self.is_done()?, ()))
-    }
-
-    fn is_done(&self) -> Result<bool, Error> {
-        Ok(self.t > self.config.max_t || self.is_goal()?)
+        Ok(Experience::new(
+            curr_state,
+            if self.is_terminal()? { 0.0 } else { -1.0 },
+            action,
+            next_state,
+            (),
+            self.to_terminal()?,
+            self.t,
+        ))
     }
 
     fn state(&self) -> Result<Self::State, Error> {
@@ -194,5 +193,16 @@ impl Environment for Acrobot {
         Ok(SVector::from_vec(vec![
             cos_s0, sin_s0, cos_s1, sin_s1, s[2], s[3],
         ]))
+    }
+
+    #[inline]
+    fn is_terminal(&self) -> Result<bool, Error> {
+        let s = self.raw()?;
+        Ok(s[0].cos() + (s[0] + s[1]).cos() < -1.)
+    }
+
+    #[inline]
+    fn is_truncated(&self) -> bool {
+        self.t >= self.config.max_t
     }
 }

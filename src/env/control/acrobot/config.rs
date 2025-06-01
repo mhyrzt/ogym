@@ -49,7 +49,7 @@ impl Default for AcrobotConfig {
 }
 
 impl AcrobotConfig {
-    pub fn builder() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 

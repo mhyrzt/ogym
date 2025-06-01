@@ -36,7 +36,7 @@ impl Default for MountainCarConfig {
 }
 
 impl MountainCarConfig {
-    pub fn builder() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 

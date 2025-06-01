@@ -1,12 +1,12 @@
 use super::{MountainCarConfig, config::MountainCarReward};
 use crate::{
-    env::{Environment, Error, StepResult},
+    env::environment::{Environment, Error, Experience},
     spaces::{Boxed, EnvSpace, Mixed, MixedItem, Space},
 };
 use nalgebra::SVector;
 
-const ACTION_SIZE: usize = 1;
-const STATE_SIZE: usize = 2;
+pub const ACTION_SIZE: usize = 1;
+pub const STATE_SIZE: usize = 2;
 
 type Action = MixedItem<ACTION_SIZE>;
 type ActionSpace = Mixed<ACTION_SIZE>;
@@ -69,7 +69,7 @@ impl MountainCar {
 
 impl Environment for MountainCar {
     type Action = Action;
-    type Info = Option<String>;
+    type Info = ();
     type State = State;
 
     fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
@@ -77,26 +77,36 @@ impl Environment for MountainCar {
         state[1] = 0.0;
         self.t = 0;
         self.state = Some(state);
-        Ok((state, None))
+        Ok((state, ()))
     }
 
     fn step(
         &mut self,
         action: Self::Action,
-    ) -> Result<StepResult<Self::State, Self::Info>, Error> {
+    ) -> Result<Experience<Self::State, Self::Info, Self::Action>, Error> {
         if self.is_done()? {
             return Err(Error::EpisodeDone);
         }
         self.space.action.contains(&action)?;
-        let state = self.state()?;
-        let v = (state[1] + self.force(&action) * self.config.f - 25e-4 * (3.0 * state[0]).cos())
-            .clamp(-self.config.max_v, self.config.max_v);
-        let x = (state[0] + v).clamp(self.config.min_x, self.config.max_x);
+        let curr_state = self.state()?;
+        let v: f64 = (curr_state[1] + self.force(&action) * self.config.f
+            - 25e-4 * (3.0 * curr_state[0]).cos())
+        .clamp(-self.config.max_v, self.config.max_v);
+        let x = (curr_state[0] + v).clamp(self.config.min_x, self.config.max_x);
 
-        let new_state = SVector::from_vec(vec![x, self.clamp_velocity_at_boundary(&x, &v)]);
-        self.state = Some(new_state);
+        let next_state = SVector::from_vec(vec![x, self.clamp_velocity_at_boundary(&x, &v)]);
+        self.state = Some(next_state);
         self.t += 1;
-        Ok((new_state, self.reward(&action), self.is_done()?, None))
+
+        Ok(Experience::new(
+            curr_state,
+            self.reward(&action),
+            action,
+            next_state,
+            (),
+            self.to_terminal()?,
+            self.t,
+        ))
     }
 
     fn is_done(&self) -> Result<bool, Error> {
@@ -111,5 +121,16 @@ impl Environment for MountainCar {
             Some(s) => Ok(s),
             None => Err(Error::NotInitialized),
         }
+    }
+
+    fn is_terminal(&self) -> Result<bool, Error> {
+        let state = self.state()?;
+        let x = state[0];
+        let v = state[1];
+        Ok(x >= self.config.goal_x && v >= self.config.goal_v)
+    }
+
+    fn is_truncated(&self) -> bool {
+        self.t >= self.config.max_t
     }
 }

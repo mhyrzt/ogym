@@ -38,7 +38,7 @@ impl Default for CartPoleConfig {
 }
 
 impl CartPoleConfig {
-    pub fn builder() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 
