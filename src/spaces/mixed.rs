@@ -2,13 +2,13 @@ use nalgebra::SVector;
 
 use super::{boxed::Boxed, discrete::Discrete, error::Error, space::Space};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MixedItem<const D: usize> {
     Discrete(u32),
     Continuous(SVector<f64, D>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Mixed<const D: usize> {
     Discrete(Discrete),
     Continuous(Boxed<D>),

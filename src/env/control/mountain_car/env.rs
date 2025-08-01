@@ -9,10 +9,10 @@ pub const ACTION_SIZE: usize = 1;
 pub const STATE_SIZE: usize = 2;
 
 type Action = MixedItem<ACTION_SIZE>;
-type ActionSpace = Mixed<ACTION_SIZE>;
+pub type ActionSpace = Mixed<ACTION_SIZE>;
 
 type State = SVector<f64, STATE_SIZE>;
-type StateSpace = Boxed<STATE_SIZE>;
+pub type StateSpace = Boxed<STATE_SIZE>;
 
 pub struct MountainCar {
     t: u32,
@@ -32,6 +32,7 @@ impl MountainCar {
             true => Mixed::continuous(SVector::from_element(-1.0), SVector::from_element(1.0))?,
             false => Mixed::discrete(3)?,
         };
+        
 
         Ok(Self {
             t: 0,
@@ -69,7 +70,7 @@ impl MountainCar {
 
 impl Environment for MountainCar {
     type Action = Action;
-    type Info = ();
+    type Info = Option<()>;
     type State = State;
 
     fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
@@ -77,7 +78,7 @@ impl Environment for MountainCar {
         state[1] = 0.0;
         self.t = 0;
         self.state = Some(state);
-        Ok((state, ()))
+        Ok((state, None))
     }
 
     fn step(
@@ -103,7 +104,7 @@ impl Environment for MountainCar {
             self.reward(&action),
             action,
             next_state,
-            (),
+            None,
             self.to_terminal()?,
             self.t,
         ))

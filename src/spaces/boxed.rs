@@ -4,7 +4,7 @@ use rand::{
     distr::{Distribution, Uniform}, rngs::StdRng, SeedableRng,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Boxed<const D: usize> {
     pub low: SVector<f64, D>,
     pub high: SVector<f64, D>,

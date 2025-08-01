@@ -25,7 +25,7 @@ type StateSpace = Boxed<STATE_SIZE>;
 type Action = MixedItem<ACTION_SIZE>;
 type ActionSpace = Mixed<ACTION_SIZE>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Acrobot {
     pub config: AcrobotConfig,
     t: u32,

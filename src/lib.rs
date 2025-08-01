@@ -6,19 +6,19 @@ pub mod spaces;
 mod tests {
     use crate::{
         env::control::cart_pole::{CartPole, CartPoleConfig},
+        env::environment::Environment,
         spaces::Space,
     };
 
     #[test]
     fn cart_pole() {
-        let config = CartPoleConfig::builder();
+        let config = CartPoleConfig::new();
         let mut env = CartPole::new(config).unwrap();
-        let (mut state, _) = env.reset(None).expect("Something Went Wrong");
-        println!("State: {}", state);
+        env.reset(None).expect("Something Went Wrong");
         let mut total_reward: f64 = 0.0;
         loop {
             let action = env.space.action.sample().expect("Failed to sample Action");
-            let (next_state, reward, done, _) = match env.step(action) {
+            let experience = match env.step(action) {
                 Ok(t) => t,
                 Err(e) => {
                     eprintln!("Step error: {:?}", e);
@@ -26,14 +26,12 @@ mod tests {
                 }
             };
 
-            state = next_state;
-            total_reward += reward;
+            total_reward += experience.reward;
 
-            if done {
+            if experience.terminal.is_done() {
                 break;
             }
         }
-        println!("State: {}", state);
         println!("Total Reward = {}", total_reward);
     }
 }

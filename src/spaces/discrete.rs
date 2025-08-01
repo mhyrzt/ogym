@@ -1,7 +1,7 @@
 use super::{error::Error, space::Space};
 use rand::Rng;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Discrete {
     n: u32,
 }

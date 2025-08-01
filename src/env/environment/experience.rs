@@ -1,13 +1,14 @@
 use super::terminal::Terminal;
 
+#[derive(Debug, Clone, Copy)]
 pub struct Experience<S, I, A> {
-    curr_state: S,
-    action: A,
-    reward: f64,
-    next_state: S,
-    terminal: Terminal,
-    info: I,
-    step: u32,
+    pub curr_state: S,
+    pub action: A,
+    pub reward: f64,
+    pub next_state: S,
+    pub terminal: Terminal,
+    pub info: I,
+    pub step: u32,
 }
 
 impl<S, I, A> Experience<S, I, A> {
