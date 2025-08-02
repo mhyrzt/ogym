@@ -8,7 +8,8 @@ use crate::{
 use nalgebra::{Isometry2, SVector, Vector2, point};
 use rand::Rng;
 use rapier2d::prelude::{
-    ColliderBuilder, InteractionGroups, RigidBodyBuilder, RigidBodyHandle, RigidBodyType,
+    ColliderBuilder, ImpulseJointHandle, InteractionGroups, RevoluteJointBuilder, RigidBodyBuilder,
+    RigidBodyHandle, RigidBodyType,
 };
 use std::f64::consts::{PI, TAU};
 
@@ -35,6 +36,7 @@ type ActionSpace = Mixed<ACTION_SIZE>;
 
 struct Leg {
     pub body: RigidBodyHandle,
+    pub joint: ImpulseJointHandle,
     pub ground_contact: bool,
 }
 
@@ -214,8 +216,25 @@ impl LunarLander {
                 handle,
                 &mut self.world.rigid_body_set,
             );
+
+            let joint = RevoluteJointBuilder::new()
+                .local_anchor1(point![0.0, 0.0])
+                .local_anchor2(point![
+                    i * self.config.leg_offset_x as f32 / self.config.scale as f32,
+                    self.config.leg_offset_y as f32 / self.config.scale as f32,
+                ])
+                .motor_velocity(0.3 * i, self.config.leg_spring_torque as f32)
+                .limits(if i == -1. { [0.4, 0.9] } else { [-0.4, -0.9] })
+                .build();
+
+            let joint_handle =
+                self.world
+                    .impulse_joint_set
+                    .insert(self.lander, handle, joint, true);
+
             self.legs.push(Leg {
                 body: handle,
+                joint: joint_handle,
                 ground_contact: false,
             });
         }

@@ -1,4 +1,4 @@
-use rapier2d::prelude::*;
+use rapier2d::{parry::query, prelude::*};
 
 pub struct PhysicsWorld {
     pub rigid_body_set: RigidBodySet,
@@ -87,6 +87,24 @@ impl PhysicsWorld {
         self.narrow_phase = NarrowPhase::new();
         self.ccd_solver = CCDSolver::new();
         self.query_pipeline = QueryPipeline::new();
+    }
+
+    pub fn check_collision(&self, a: ColliderHandle, b: ColliderHandle) -> Option<bool> {
+        let coll_a = self.collider_set.get(a)?;
+        let coll_b = self.collider_set.get(b)?;
+
+        let body_a = self.rigid_body_set.get(coll_a.parent()?)?;
+        let body_b = self.rigid_body_set.get(coll_b.parent()?)?;
+
+        let contact = query::contact(
+            body_a.position(),
+            coll_a.shape(),
+            body_b.position(),
+            coll_b.shape(),
+            0.0,
+        );
+
+        Some(matches!(contact, Ok(Some(_))))
     }
 }
 
