@@ -8,8 +8,8 @@ use crate::{
 use nalgebra::{Isometry2, SVector, Vector2, point};
 use rand::Rng;
 use rapier2d::prelude::{
-    ColliderBuilder, ImpulseJointHandle, InteractionGroups, RevoluteJointBuilder, RigidBodyBuilder,
-    RigidBodyHandle, RigidBodyType,
+    ColliderBuilder, ColliderHandle, CollisionEvent, ImpulseJointHandle, InteractionGroups,
+    RevoluteJointBuilder, RigidBodyBuilder, RigidBodyHandle, RigidBodyType,
 };
 use std::f64::consts::{PI, TAU};
 
@@ -57,6 +57,7 @@ pub struct LunarLander {
     lander: RigidBodyHandle,
     legs: Vec<Leg>,
     moon: RigidBodyHandle,
+    crash: bool,
     prev_shaping: Option<f64>,
 }
 
@@ -82,6 +83,7 @@ impl LunarLander {
             legs: Vec::new(),
             moon: Default::default(),
             prev_shaping: None,
+            crash: false,
         };
 
         lunar_lander.reset(None)?;
@@ -318,7 +320,7 @@ impl LunarLander {
                         + (direction * self.config.side_engine_offset_x / self.config.scale)
                             as f32);
             let impulse_pos = point![
-                translation.x + ox - tip.0 * 17.0 * self.config.scale as f32,
+                translation.x + ox - tip.0 * 17.0 / self.config.scale as f32,
                 translation.y
                     + oy
                     + tip.1 * self.config.side_engine_offset_y as f32 / self.config.scale as f32
@@ -403,7 +405,7 @@ impl LunarLander {
         (reward, shaping)
     }
 
-    fn is_game_over(&self) -> bool {
+    fn is_out_of_screen(&self) -> bool {
         if let Some(state) = &self.state {
             state[0].abs() >= 1.0
         } else {
@@ -411,9 +413,67 @@ impl LunarLander {
         }
     }
 
+    fn has_collided<T: PartialEq + Copy>(&self, parents: (T, T), a: T, b: T) -> bool {
+        parents == (a, b) || parents == (b, a)
+    }
+
+    fn to_rigid(
+        &self,
+        h1: ColliderHandle,
+        h2: ColliderHandle,
+    ) -> Result<(RigidBodyHandle, RigidBodyHandle), ()> {
+        Ok((
+            self.world
+                .collider_set
+                .get(h1)
+                .and_then(|c| c.parent())
+                .ok_or(())?,
+            self.world
+                .collider_set
+                .get(h2)
+                .and_then(|c| c.parent())
+                .ok_or(())?,
+        ))
+    }
+
+    fn is_lander_moon_collision(&self, h1: ColliderHandle, h2: ColliderHandle) -> Option<bool> {
+        let parents = (
+            self.world.collider_set.get(h1)?.parent()?,
+            self.world.collider_set.get(h2)?.parent()?,
+        );
+        Some(self.has_collided(parents, self.moon, self.lander))
+    }
+
+    fn is_leg_collided(&self, h1: ColliderHandle, h2: ColliderHandle) -> Option<(bool, bool)> {
+        let parents = (
+            self.world.collider_set.get(h1)?.parent()?,
+            self.world.collider_set.get(h2)?.parent()?,
+        );
+        
+        let left_leg = self.has_collided(parents, self.moon, self.legs[0].body);
+        let right_leg = self.has_collided(parents, self.moon, self.legs[1].body);
+        Some((left_leg, right_leg))
+    }
+
+    fn handle_collisions(&mut self) {
+        while let Ok(collision_event) = self.world.collision_recv.try_recv() {
+            if let CollisionEvent::Started(h1, h2, _) = collision_event {
+                self.crash = self.is_lander_moon_collision(h1, h2).is_some();
+                let on_ground = self.is_leg_collided(h1, h2).unwrap_or((false, false));
+                self.legs[0].ground_contact = on_ground.0;
+                self.legs[1].ground_contact = on_ground.1;
+
+            }
+        }
+    }
+
+    fn is_game_over(&self) -> bool {
+        self.crash || self.is_out_of_screen()
+    }
+
     fn is_landed(&self) -> bool {
         if let Some(lander_body) = self.world.rigid_body_set.get(self.lander) {
-            !lander_body.is_moving()
+            !lander_body.is_moving() && self.legs.iter().all(|leg| leg.ground_contact)
         } else {
             false
         }

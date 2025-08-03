@@ -1,4 +1,4 @@
-use rapier2d::{parry::query, prelude::*};
+use rapier2d::{crossbeam::{self, channel::Receiver}, parry::query, prelude::*};
 
 pub struct PhysicsWorld {
     pub rigid_body_set: RigidBodySet,
@@ -14,11 +14,16 @@ pub struct PhysicsWorld {
     pub ccd_solver: CCDSolver,
     pub query_pipeline: QueryPipeline,
     pub physics_hooks: (),
-    pub event_handler: (),
+    pub event_handler: ChannelEventCollector,
+    pub collision_recv: Receiver<CollisionEvent>,
+    pub contact_force_recv: Receiver<ContactForceEvent>,
 }
 
 impl PhysicsWorld {
     pub fn new(gravity_y: f32) -> Self {
+        let (collision_send, collision_recv) = crossbeam::channel::unbounded();
+        let (contact_force_send, contact_force_recv) = crossbeam::channel::unbounded();
+        let event_handler = ChannelEventCollector::new(collision_send, contact_force_send);
         Self {
             rigid_body_set: RigidBodySet::new(),
             collider_set: ColliderSet::new(),
@@ -33,7 +38,9 @@ impl PhysicsWorld {
             ccd_solver: CCDSolver::new(),
             query_pipeline: QueryPipeline::new(),
             physics_hooks: (),
-            event_handler: (),
+            event_handler,
+            collision_recv,
+            contact_force_recv,
         }
     }
 
@@ -89,23 +96,6 @@ impl PhysicsWorld {
         self.query_pipeline = QueryPipeline::new();
     }
 
-    pub fn check_collision(&self, a: ColliderHandle, b: ColliderHandle) -> Option<bool> {
-        let coll_a = self.collider_set.get(a)?;
-        let coll_b = self.collider_set.get(b)?;
-
-        let body_a = self.rigid_body_set.get(coll_a.parent()?)?;
-        let body_b = self.rigid_body_set.get(coll_b.parent()?)?;
-
-        let contact = query::contact(
-            body_a.position(),
-            coll_a.shape(),
-            body_b.position(),
-            coll_b.shape(),
-            0.0,
-        );
-
-        Some(matches!(contact, Ok(Some(_))))
-    }
 }
 
 impl Default for PhysicsWorld {

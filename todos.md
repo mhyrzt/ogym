@@ -1,53 +1,50 @@
 # Lunar Lander Implementation Alignment TODOs
 
-This document outlines the necessary changes to make the Rust implementation of the Lunar Lander environment (`src/env/rapier/lunar_lander/env.rs`) identical to the Python/Box2D version (`src/env/rapier/lunar_lander/lunar_lander.py`).
+This document outlines the necessary changes to align the Rust implementation of the Lunar Lander environment (`src/env/rapier/lunar_lander/env.rs`) with the Python/Box2D version (`src/env/rapier/lunar_lander/lunar_lander.py`).
 
-The items are ordered by priority, from critical bugs to minor inconsistencies.
+The items are ordered by their impact on simulation correctness and behavioral parity.
 
----
+## 1. [CRITICAL] Implement "Out of Bounds" Termination
 
-### 1. [CRITICAL] Implement Crash Detection
-
-- **Issue:** The Rust version lacks a crash detection mechanism. The simulation only terminates if the lander flies off-screen or comes to a complete rest on the pad. The Python version terminates with a reward of -100 if the lander's main body collides with the terrain.
+- **Issue:** The Rust `step` function does not terminate the episode when the lander flies off-screen (`abs(state[0]) >= 1.0`). The Python version terminates with a reward of -100 in this case. The `is_out_of_screen()` method exists in Rust but is not used to determine termination within the main step loop.
 - **Required Change:**
-  - Implement a mechanism in the Rust `step` function to check for collisions involving the `lander` rigid body. Rapier's `narrow_phase` query or contact events can be used for this.
-  - If a collision is detected, the episode should terminate immediately with a reward of -100, just like in the Python version.
+  - In the `step` function, check if `self.is_out_of_screen()` is true.
+  - If it is, set `terminated` to `true` and the `reward` to `-100.0`, mirroring the Python logic.
 
-### 2. [BUG] Correct Leg Joint Limits
+## 2. [MAJOR] Correct Wind & Turbulence Physics
 
-- **Issue:** The revolute joint limits for the right leg (where `i = 1.0`) are swapped in the Rust code. The current code sets them as `[-0.4, -0.9]`.
+- **Issue:** The Rust code applies wind and turbulence as an *impulse* (`apply_impulse`), which is an instantaneous change in velocity. The Python code applies them as a continuous *force* (`ApplyForceToCenter` and `ApplyTorque`). This causes a significant divergence in flight dynamics.
 - **Required Change:**
-  - In `create_legs`, change the limits for the right leg to be `[-0.9, -0.4]`, which correctly corresponds to the `[lower, upper]` angle format.
+  - In `apply_wind_effects`, replace `apply_impulse` with `apply_force` and `apply_torque_impulse` with `apply_torque`. This will correctly simulate a continuous push from the wind.
 
-### 3. [BUG] Correct Side Engine Impulse Position
+## 3. [MAJOR] Replicate Python's Wind Pattern
 
-- **Issue:** When calculating the point of application for the side engine impulse, the Rust code incorrectly multiplies the `17.0` term by `self.config.scale` instead of dividing by it.
-- **Required Change:**
-  - In `apply_engine_forces`, modify the `impulse_pos` calculation for the side engine.
-  - Change `... - tip.0 * 17.0 * self.config.scale as f32` to `... - tip.0 * 17.0 / self.config.scale as f32`.
-
-### 4. [BUG] Correct Discrete Side Engine Direction
-
-- **Issue:** In discrete action mode, the side engine force for `action = 3` is incorrectly applied in the negative direction (`-1.0`).
-- **Required Change:**
-  - In `apply_engine_forces`, modify the `match` statement for discrete actions. When the action is `MixedItem::Discrete(3)`, the `direction` should be `1.0`, not `-1.0`.
-
-### 5. [MAJOR] Use Forces for Wind Effects
-
-- **Issue:** The Rust code applies wind and turbulence as an *impulse* (`apply_impulse`), which is an instantaneous change in velocity. The Python code applies them as a *force* (`ApplyForceToCenter`), which is a continuous push over the physics timestep. This leads to significantly different flight dynamics.
-- **Required Change:**
-  - In `apply_wind_effects`, replace `apply_impulse` with `apply_force` and `apply_torque_impulse` with `apply_torque`. This will require accessing the rigid body set mutably.
-
-### 6. [MINOR] Replicate Python's Wind Pattern
-
-- **Issue:** The Rust implementation's wind calculation is based on the step counter `t`, which resets to 0 for every episode. The Python version uses two separate indices (`wind_idx`, `torque_idx`) that are initialized to random values at the start of an episode, creating a more varied wind pattern.
+- **Issue:** The Rust implementation's wind calculation is deterministic, based on the step counter `t` which resets every episode. The Python version uses `wind_idx` and `torque_idx` which are initialized to large random values on reset, creating a more varied and unpredictable wind pattern across episodes.
 - **Required Change:**
   - Add `wind_idx` and `torque_idx` fields to the `LunarLander` struct.
-  - In `reset`, initialize these to large random integer values, mimicking the Python implementation.
-  - In `apply_wind_effects`, use these indices in the `sin` and `tanh` calculations instead of `self.t`, and increment them on each step.
+  - In the `reset` function, initialize these fields to large random integer values.
+  - In `apply_wind_effects`, use these indices for the `sin` and `tanh` calculations instead of `self.t`, and increment them each step.
 
-### 7. [NAMING] Align Configuration Parameters
+## 4. [BUG] Correct Right Leg Joint Limits
 
-- **Issue:** Many configuration parameters in Rust have different names than their Python counterparts (e.g., `main_engine_force` vs. `main_engine_power`, `leg_offset_x` vs. `leg_away`).
+- **Issue:** The revolute joint limits for the right leg are swapped in the Rust code. The current code sets them as `[-0.4, -0.9]`, which is an invalid range for `[lower, upper]`.
 - **Required Change:**
-  - (Optional, for clarity) Rename the fields in the `LunarLanderConfig` struct to match the names used in the Python `__init__` method. This would improve maintainability and make future comparisons easier.
+  - In `create_legs`, for the leg where `i = 1.0`, change the joint `limits` to `[-0.9, -0.4]` to match the Python version and correct the joint's range of motion.
+
+## 5. [BUG] Correct Discrete Side Engine Direction
+
+- **Issue:** In discrete action mode, the side engine force for `action = 3` is incorrectly applied in the negative direction (`-1.0`). In Python, action `1` is left and `3` is right.
+- **Required Change:**
+  - In `apply_engine_forces`, modify the `match` statement for discrete actions. When the action is `MixedItem::Discrete(3)`, the `direction` variable should be `1.0`, not `-1.0`.
+
+## 6. [MINOR] Use Force for Initial Push
+
+- **Issue:** The Rust code uses `apply_impulse` to give the lander its initial random push. The Python code uses `ApplyForceToCenter`. To better match the physics, a force should be used.
+- **Required Change:**
+  - In `create_lander`, replace the call to `body.apply_impulse(...)` with `body.apply_force(...)` or an equivalent that applies a continuous force for one timestep.
+
+## 7. [MAINTAINABILITY] Align Configuration Parameter Names
+
+- **Issue:** Many configuration parameters in the Rust `LunarLanderConfig` struct have different names than their Python counterparts (e.g., `main_engine_force` vs. `main_engine_power`, `leg_offset_x` vs. `leg_away`). This makes direct comparison and maintenance difficult.
+- **Required Change:**
+  - Rename the fields in the `LunarLanderConfig` struct and associated variables to match the names used in the Python `__init__` method. This is optional but highly recommended for clarity and future development.
