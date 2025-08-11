@@ -15,8 +15,6 @@ use std::f64::consts::{PI, TAU};
 
 const CHUNKS: usize = 11;
 const MIDDLE: usize = CHUNKS / 2;
-const WIDTH: f64 = 600.;
-const HEIGHT: f64 = 400.;
 const LANDER_POLY: [(i32, i32); 6] = [
     (-14, 17),
     (-17, 0),
@@ -25,6 +23,7 @@ const LANDER_POLY: [(i32, i32); 6] = [
     (17, 0),
     (14, 17),
 ];
+const LANDER_POLY_WIDTH: f64 = 34.0; // 17 - (-17)
 const ACTION_SIZE: usize = 2;
 const STATE_SIZE: usize = 8;
 
@@ -59,6 +58,8 @@ pub struct LunarLander {
     moon: RigidBodyHandle,
     crash: bool,
     prev_shaping: Option<f64>,
+    wind_idx: f64,
+    torque_idx: f64,
 }
 
 impl LunarLander {
@@ -84,6 +85,8 @@ impl LunarLander {
             moon: Default::default(),
             prev_shaping: None,
             crash: false,
+            wind_idx: 0.0,
+            torque_idx: 0.0,
         };
 
         lunar_lander.reset(None)?;
@@ -226,7 +229,7 @@ impl LunarLander {
                     self.config.leg_offset_y as f32 / self.config.scale as f32,
                 ])
                 .motor_velocity(0.3 * i, self.config.leg_spring_torque as f32)
-                .limits(if i == -1. { [0.4, 0.9] } else { [-0.4, -0.9] })
+                .limits(if i == -1. { [-0.9, -0.4] } else { [0.4, 0.9] })
                 .build();
 
             let joint_handle =
@@ -297,9 +300,9 @@ impl LunarLander {
 
         // SIDE ENGINE FORCE
         let (side_engine_active, direction) = match action {
-            MixedItem::Discrete(1) => (true, -1.0),
-            MixedItem::Discrete(3) => (true, -1.0),
-            MixedItem::Continuous(matrix) => (matrix[1].abs() > 0.5, matrix[1].signum()),
+            MixedItem::Discrete(1) => (true, 1.0),  // Left engine
+            MixedItem::Discrete(3) => (true, -1.0), // Right engine
+            MixedItem::Continuous(actions) => (actions[1].abs() > 0.5, actions[1].signum()),
             _ => (false, 0.0),
         };
 
@@ -320,7 +323,7 @@ impl LunarLander {
                         + (direction * self.config.side_engine_offset_x / self.config.scale)
                             as f32);
             let impulse_pos = point![
-                translation.x + ox - tip.0 * 17.0 / self.config.scale as f32,
+                translation.x + ox - tip.0 * LANDER_POLY_WIDTH as f32 / 2.0 / self.config.scale as f32,
                 translation.y
                     + oy
                     + tip.1 * self.config.side_engine_offset_y as f32 / self.config.scale as f32
@@ -345,11 +348,13 @@ impl LunarLander {
         {
             return;
         }
-        let t = self.t as f64;
-        let c = ((0.02 * t).sin() + (PI * 0.01 * t).sin()).tanh();
+        self.wind_idx += 1.0;
+        self.torque_idx += 1.0;
+        let c = ((0.02 * self.wind_idx).sin() + (PI * 0.01 * self.wind_idx).sin()).tanh();
         let wind_power = self.config.wind_strength.unwrap_or(0.0);
         let wind_mag = c * wind_power;
-        let torque_mag = c * self.config.turbulence_strength;
+        let torque_mag = ((0.02 * self.torque_idx).sin() + (PI * 0.01 * self.torque_idx).sin()).tanh() 
+            * self.config.turbulence_strength;
         if let Some(lander_body) = self.world.rigid_body_set.get_mut(self.lander) {
             lander_body.apply_impulse(Vector2::new(wind_mag as f32, 0.0), true);
             lander_body.apply_torque_impulse(torque_mag as f32, true);
@@ -449,7 +454,7 @@ impl LunarLander {
             self.world.collider_set.get(h1)?.parent()?,
             self.world.collider_set.get(h2)?.parent()?,
         );
-        
+
         let left_leg = self.has_collided(parents, self.moon, self.legs[0].body);
         let right_leg = self.has_collided(parents, self.moon, self.legs[1].body);
         Some((left_leg, right_leg))
@@ -457,12 +462,19 @@ impl LunarLander {
 
     fn handle_collisions(&mut self) {
         while let Ok(collision_event) = self.world.collision_recv.try_recv() {
-            if let CollisionEvent::Started(h1, h2, _) = collision_event {
-                self.crash = self.is_lander_moon_collision(h1, h2).is_some();
-                let on_ground = self.is_leg_collided(h1, h2).unwrap_or((false, false));
-                self.legs[0].ground_contact = on_ground.0;
-                self.legs[1].ground_contact = on_ground.1;
-
+            match collision_event {
+                CollisionEvent::Started(h1, h2, _) => {
+                    self.crash = self.is_lander_moon_collision(h1, h2).is_some();
+                    let on_ground = self.is_leg_collided(h1, h2).unwrap_or((false, false));
+                    self.legs[0].ground_contact = on_ground.0;
+                    self.legs[1].ground_contact = on_ground.1;
+                }
+                CollisionEvent::Stopped(h1, h2, _) => {
+                    if let Some((left_leg, right_leg)) = self.is_leg_collided(h1, h2) {
+                        self.legs[0].ground_contact &= !left_leg;
+                        self.legs[1].ground_contact &= !right_leg;
+                    }
+                }
             }
         }
     }
@@ -473,7 +485,16 @@ impl LunarLander {
 
     fn is_landed(&self) -> bool {
         if let Some(lander_body) = self.world.rigid_body_set.get(self.lander) {
-            !lander_body.is_moving() && self.legs.iter().all(|leg| leg.ground_contact)
+            // In Rapier, we don't have an "awake" flag, but we can check if the body has 
+            // minimal linear and angular velocity, and all legs are in contact with ground
+            let linear_velocity = lander_body.linvel();
+            let angular_velocity = lander_body.angvel();
+            let linear_threshold = 1e-3;
+            let angular_threshold = 1e-3;
+            
+            linear_velocity.magnitude() < linear_threshold 
+                && angular_velocity.abs() < angular_threshold
+                && self.legs.iter().all(|leg| leg.ground_contact)
         } else {
             false
         }
@@ -490,6 +511,16 @@ impl Environment for LunarLander {
         self.world = PhysicsWorld::new(self.config.gravity as f32);
         self.t = 0;
         self.helipad = Helipad::default();
+        self.prev_shaping = None;
+        self.crash = false;
+        
+        // Initialize wind indices when wind is enabled
+        if self.config.wind_strength.is_some() {
+            // For now, we'll use a fixed seed or time-based initialization
+            // In a more complete implementation, we would use the seed parameter
+            self.wind_idx = 0.0;
+            self.torque_idx = 0.0;
+        }
 
         self.create_terrain();
         self.create_lander();
@@ -513,24 +544,18 @@ impl Environment for LunarLander {
         let (m_power, s_power) = self.apply_engine_forces(&action);
 
         // Step physics simulation
-        self.world.step();
+        self.world.step_with_dt(1.0 / self.config.fps as f32);
+        self.handle_collisions();
 
         let state = self.get_state();
         let (reward, shaping) = self.calc_reward(&state, m_power as f64, s_power as f64); // You'll need to track prev_shaping
         self.prev_shaping = Some(shaping);
 
-        let terminated = if self.is_game_over() {
-            true
-        } else {
-            self.is_landed()
-        };
-
-        let reward = if self.is_game_over() {
-            -100.0
-        } else if self.is_landed() {
-            100.0
-        } else {
-            reward
+        let terminated = self.is_game_over() || self.is_landed();
+        let reward = match (self.is_game_over(), self.is_landed()) {
+            (false, true) => 100.0,
+            (true, false) => -100.0,
+            _ => reward,
         };
 
         self.state = Some(state);

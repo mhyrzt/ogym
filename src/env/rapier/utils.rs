@@ -1,4 +1,7 @@
-use rapier2d::{crossbeam::{self, channel::Receiver}, parry::query, prelude::*};
+use rapier2d::{
+    crossbeam::{self, channel::Receiver},
+    prelude::*,
+};
 
 pub struct PhysicsWorld {
     pub rigid_body_set: RigidBodySet,
@@ -65,7 +68,6 @@ impl PhysicsWorld {
     pub fn step_with_dt(&mut self, dt: f32) {
         let mut params = self.integration_parameters;
         params.dt = dt;
-
         self.physics_pipeline.step(
             &self.gravity,
             &params,
@@ -95,7 +97,6 @@ impl PhysicsWorld {
         self.ccd_solver = CCDSolver::new();
         self.query_pipeline = QueryPipeline::new();
     }
-
 }
 
 impl Default for PhysicsWorld {
