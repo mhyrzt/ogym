@@ -23,7 +23,7 @@ const LANDER_POLY: [(i32, i32); 6] = [
     (17, 0),
     (14, 17),
 ];
-const LANDER_POLY_WIDTH: f64 = 34.0; // 17 - (-17)
+const LANDER_POLY_WIDTH: f64 = 34.0;
 const ACTION_SIZE: usize = 2;
 const STATE_SIZE: usize = 8;
 
@@ -323,7 +323,8 @@ impl LunarLander {
                         + (direction * self.config.side_engine_offset_x / self.config.scale)
                             as f32);
             let impulse_pos = point![
-                translation.x + ox - tip.0 * LANDER_POLY_WIDTH as f32 / 2.0 / self.config.scale as f32,
+                translation.x + ox
+                    - tip.0 * LANDER_POLY_WIDTH as f32 / 2.0 / self.config.scale as f32,
                 translation.y
                     + oy
                     + tip.1 * self.config.side_engine_offset_y as f32 / self.config.scale as f32
@@ -353,7 +354,8 @@ impl LunarLander {
         let c = ((0.02 * self.wind_idx).sin() + (PI * 0.01 * self.wind_idx).sin()).tanh();
         let wind_power = self.config.wind_strength.unwrap_or(0.0);
         let wind_mag = c * wind_power;
-        let torque_mag = ((0.02 * self.torque_idx).sin() + (PI * 0.01 * self.torque_idx).sin()).tanh() 
+        let torque_mag = ((0.02 * self.torque_idx).sin() + (PI * 0.01 * self.torque_idx).sin())
+            .tanh()
             * self.config.turbulence_strength;
         if let Some(lander_body) = self.world.rigid_body_set.get_mut(self.lander) {
             lander_body.apply_impulse(Vector2::new(wind_mag as f32, 0.0), true);
@@ -441,12 +443,13 @@ impl LunarLander {
         ))
     }
 
-    fn is_lander_moon_collision(&self, h1: ColliderHandle, h2: ColliderHandle) -> Option<bool> {
+    
+    fn has_crashed(&self, h1: ColliderHandle, h2: ColliderHandle) -> Option<bool> {
         let parents = (
             self.world.collider_set.get(h1)?.parent()?,
             self.world.collider_set.get(h2)?.parent()?,
         );
-        Some(self.has_collided(parents, self.moon, self.lander))
+        Some(self.lander == parents.0 || self.lander == parents.1)
     }
 
     fn is_leg_collided(&self, h1: ColliderHandle, h2: ColliderHandle) -> Option<(bool, bool)> {
@@ -464,7 +467,7 @@ impl LunarLander {
         while let Ok(collision_event) = self.world.collision_recv.try_recv() {
             match collision_event {
                 CollisionEvent::Started(h1, h2, _) => {
-                    self.crash = self.is_lander_moon_collision(h1, h2).is_some();
+                    self.crash = self.has_crashed(h1, h2).is_some();
                     let on_ground = self.is_leg_collided(h1, h2).unwrap_or((false, false));
                     self.legs[0].ground_contact = on_ground.0;
                     self.legs[1].ground_contact = on_ground.1;
@@ -485,14 +488,14 @@ impl LunarLander {
 
     fn is_landed(&self) -> bool {
         if let Some(lander_body) = self.world.rigid_body_set.get(self.lander) {
-            // In Rapier, we don't have an "awake" flag, but we can check if the body has 
+            // In Rapier, we don't have an "awake" flag, but we can check if the body has
             // minimal linear and angular velocity, and all legs are in contact with ground
             let linear_velocity = lander_body.linvel();
             let angular_velocity = lander_body.angvel();
             let linear_threshold = 1e-3;
             let angular_threshold = 1e-3;
-            
-            linear_velocity.magnitude() < linear_threshold 
+
+            linear_velocity.magnitude() < linear_threshold
                 && angular_velocity.abs() < angular_threshold
                 && self.legs.iter().all(|leg| leg.ground_contact)
         } else {
@@ -513,11 +516,8 @@ impl Environment for LunarLander {
         self.helipad = Helipad::default();
         self.prev_shaping = None;
         self.crash = false;
-        
-        // Initialize wind indices when wind is enabled
+
         if self.config.wind_strength.is_some() {
-            // For now, we'll use a fixed seed or time-based initialization
-            // In a more complete implementation, we would use the seed parameter
             self.wind_idx = 0.0;
             self.torque_idx = 0.0;
         }
