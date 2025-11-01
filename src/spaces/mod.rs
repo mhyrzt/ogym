@@ -2,8 +2,8 @@ mod boxed;
 mod discrete;
 mod error;
 mod mixed;
-mod space;
 mod multi_discrete;
+mod space;
 
 pub use boxed::Boxed;
 pub use error::Error;

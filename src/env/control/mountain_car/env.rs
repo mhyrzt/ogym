@@ -32,7 +32,6 @@ impl MountainCar {
             true => Mixed::continuous(SVector::from_element(-1.0), SVector::from_element(1.0))?,
             false => Mixed::discrete(3)?,
         };
-        
 
         Ok(Self {
             t: 0,

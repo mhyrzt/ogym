@@ -1,6 +1,5 @@
 use std::f64::consts::PI;
 
-
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum DynamicsMode {
     Book,

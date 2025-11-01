@@ -100,5 +100,4 @@ impl PendulumConfig {
         self.continuous = true;
         self
     }
-
 }

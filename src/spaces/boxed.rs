@@ -1,7 +1,9 @@
 use super::{error::Error, space::Space};
 use nalgebra::SVector;
 use rand::{
-    distr::{Distribution, Uniform}, rngs::StdRng, SeedableRng,
+    SeedableRng,
+    distr::{Distribution, Uniform},
+    rngs::StdRng,
 };
 
 #[derive(Debug, Clone)]
@@ -23,7 +25,12 @@ impl<const D: usize> Boxed<D> {
         Ok(Self { low, high })
     }
 
-    pub fn uniform(&self, seed: Option<u64>, low: f64, high: f64) -> Result<SVector<f64, D>, Error> {
+    pub fn uniform(
+        &self,
+        seed: Option<u64>,
+        low: f64,
+        high: f64,
+    ) -> Result<SVector<f64, D>, Error> {
         let mut rng = match seed {
             Some(state) => StdRng::seed_from_u64(state),
             None => StdRng::from_rng(&mut rand::rng()),

@@ -229,7 +229,7 @@ impl LunarLander {
                     self.config.leg_offset_y as f32 / self.config.scale as f32,
                 ])
                 .motor_velocity(0.3 * i, self.config.leg_spring_torque as f32)
-                .limits(if i == -1. { [-0.9, -0.4] } else { [0.4, 0.9] })
+                .limits(if i == -1. { [0.9, 0.4] } else { [-0.4, -0.9] })
                 .build();
 
             let joint_handle =
@@ -443,7 +443,6 @@ impl LunarLander {
         ))
     }
 
-    
     fn has_crashed(&self, h1: ColliderHandle, h2: ColliderHandle) -> Option<bool> {
         let parents = (
             self.world.collider_set.get(h1)?.parent()?,
@@ -510,7 +509,7 @@ impl Environment for LunarLander {
     type State = State;
     type Info = ();
 
-    fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
+    fn reset(&mut self, _seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
         self.world = PhysicsWorld::new(self.config.gravity as f32);
         self.t = 0;
         self.helipad = Helipad::default();
