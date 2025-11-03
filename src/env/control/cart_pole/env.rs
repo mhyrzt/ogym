@@ -1,6 +1,6 @@
 use super::config::{CartPoleConfig, KinematicsIntegrator};
 use crate::{
-    env::environment::{Environment, Error, Experience, Terminal},
+    env::environment::{Environment, Error, Experience},
     spaces::{Boxed, EnvSpace, Mixed, MixedItem, Space},
 };
 use nalgebra::SVector;
