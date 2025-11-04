@@ -17,4 +17,7 @@ pub enum Error {
 
     #[error("Distribution Error: {0}")]
     Distribution(#[from] rand::distr::uniform::Error),
+
+    #[error("MuJoCo Initialization Error: {0}")]
+    MjInitError(String),
 }
