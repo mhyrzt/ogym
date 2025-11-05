@@ -540,6 +540,7 @@ name = "ogym"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "mujoco-rs-sys",
  "mujoco-rust",
  "nalgebra 0.33.2",
  "rand",

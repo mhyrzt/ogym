@@ -20,4 +20,14 @@ pub enum Error {
 
     #[error("MuJoCo Initialization Error: {0}")]
     MjInitError(String),
+
+    #[error("Action dimension mismatch. Expected {expected}, got {got}")]
+    InvalidActionDimension { expected: usize, got: usize },
+
+    #[error("State dimension mismatch for {field}. Expected {expected}, got {got}")]
+    InvalidStateDimension {
+        field: &'static str,
+        expected: usize,
+        got: usize,
+    },
 }
