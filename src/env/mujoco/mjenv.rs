@@ -18,7 +18,6 @@ impl MjEnv {
         let state = State::new(&model);
         let simulation = Simulation::new(model);
 
-        // Store initial state
         let init_qpos = {
             let ptr = state.ptr();
             let nq = unsafe { (*simulation.model.ptr()).nq as usize };
@@ -40,8 +39,6 @@ impl MjEnv {
         })
     }
 
-    // === Core Accessors ===
-
     pub fn model(&self) -> &Model {
         &self.simulation.model
     }
@@ -62,8 +59,6 @@ impl MjEnv {
         &self.simulation
     }
 
-    // === Timing ===
-
     pub fn timestep(&self) -> f64 {
         let ptr = self.model().ptr();
         unsafe { (*ptr).opt.timestep }
@@ -77,8 +72,6 @@ impl MjEnv {
         let ptr = self.state.ptr();
         unsafe { (*ptr).time }
     }
-
-    // === Model Properties ===
 
     pub fn extent(&self) -> f64 {
         let ptr = self.model().ptr();
@@ -131,8 +124,6 @@ impl MjEnv {
         unsafe { (*self.model().ptr()).ntendon as usize }
     }
 
-    // === Initial State ===
-
     pub fn init_qpos(&self) -> &[f64] {
         &self.init_qpos
     }
@@ -140,8 +131,6 @@ impl MjEnv {
     pub fn init_qvel(&self) -> &[f64] {
         &self.init_qvel
     }
-
-    // === Immutable State Accessors ===
 
     pub fn qpos(&self) -> &[f64] {
         let ptr = self.state.ptr();
@@ -201,8 +190,6 @@ impl MjEnv {
         unsafe { std::slice::from_raw_parts((*ptr).ten_length, self.ntendon()) }
     }
 
-    // === Position/Orientation Data ===
-
     pub fn xipos(&self) -> &[[f64; 3]] {
         let ptr = self.state.ptr();
         unsafe { std::slice::from_raw_parts((*ptr).xipos as *const [f64; 3], self.nbody()) }
@@ -230,8 +217,6 @@ impl MjEnv {
         Some(unsafe { [*pos_ptr, *pos_ptr.add(1), *pos_ptr.add(2)] })
     }
 
-    // === Mutable State Accessors ===
-
     pub fn qpos_mut(&mut self) -> &mut [f64] {
         let ptr = self.state.ptr();
         let nq = self.nq();
@@ -255,8 +240,6 @@ impl MjEnv {
         let na = self.na();
         unsafe { std::slice::from_raw_parts_mut((*ptr).act, na) }
     }
-
-    // === Core Simulation Methods ===
 
     pub fn set_state(&mut self, qpos: &[f64], qvel: &[f64]) -> Result<(), Error> {
         if qpos.len() != self.nq() {
@@ -325,8 +308,6 @@ impl MjEnv {
         state
     }
 
-    // === Nalgebra Vector Conversions ===
-
     pub fn qpos_vector(&self) -> na::DVector<f64> {
         na::DVector::from_column_slice(self.qpos())
     }
@@ -371,8 +352,6 @@ impl MjEnv {
     pub fn ten_length_vector(&self) -> na::DVector<f64> {
         na::DVector::from_column_slice(self.ten_length())
     }
-
-    // === Nalgebra Matrix Conversions ===
 
     pub fn xipos_matrix(&self) -> na::DMatrix<f64> {
         let data = self.xipos();

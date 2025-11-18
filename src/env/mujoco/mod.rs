@@ -6,7 +6,6 @@ pub mod humanoid_standup;
 pub mod inverted_double_pendulum;
 pub mod inverted_pendulum;
 pub mod mjenv;
-pub mod point;
 pub mod pusher;
 pub mod reacher;
 pub mod swimmer;
