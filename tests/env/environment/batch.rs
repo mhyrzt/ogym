@@ -194,14 +194,14 @@ mod tests {
     fn test_states_and_dones() {
         let mut env = MockBatchEnvironment::new(2);
         env.reset_all(None).unwrap();
-        
+
         // Step to change state
         env.step_all(&vec![3, 7]).unwrap();
-        
+
         let states = env.states().unwrap();
         assert_eq!(states, vec![3, 7]);
-        
+
         let dones = env.dones().unwrap();
-        assert_eq!(dones, vec![false, true]); // Second env should be done (7 >= 10 is false, 3+7=10 so true)
+        assert_eq!(dones, vec![false, false]);
     }
 }

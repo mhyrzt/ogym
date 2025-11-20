@@ -36,21 +36,25 @@ impl Environment for MockEnvironment {
         &mut self,
         action: Self::Action,
     ) -> Result<Experience<Self::State, Self::Info, Self::Action>, Error> {
+        // Store original termination status to preserve manual settings
+        let was_terminated = self.terminated;
+        let was_truncated = self.truncated;
+
         // Apply action to get new state
         let next_state = self.state + action;
-        
+
         // Calculate reward
         let reward = next_state as f64;
-        
-        // Determine if terminated or truncated
-        self.terminated = next_state >= 10;  // arbitrary termination condition
-        self.truncated = false;  // For simplicity, we'll set truncation separately in tests
-        
+
+        // Update terminated based on the new state, but preserve existing termination
+        self.terminated = self.terminated || next_state >= 10;  // arbitrary termination condition
+        // truncated is preserved as it's not reset in the step logic
+
         self.state = next_state;
         self.done = self.terminated || self.truncated;
-        
+
         let terminal = Terminal::from_flags(self.terminated, self.truncated);
-        
+
         Ok(Experience::new(
             next_state - action, // current state (before action)
             reward,

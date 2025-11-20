@@ -6,15 +6,7 @@ mod tests {
 
     #[test]
     fn test_experience_creation() {
-        let experience = Experience::new(
-            10,           // curr_state
-            5.5,          // reward
-            2,            // action
-            15,           // next_state
-            "info".to_string(), // info
-            Terminal::Ongoing,  // terminal
-            1,            // step
-        );
+        let experience = Experience::new(10, 5.5, 2, 15, "info".to_string(), Terminal::Ongoing, 1);
 
         assert_eq!(experience.curr_state, 10);
         assert_eq!(experience.action, 2);
@@ -45,20 +37,10 @@ mod tests {
 
     #[test]
     fn test_experience_clone_and_copy() {
-        let experience1 = Experience::new(
-            10,
-            5.5,
-            2,
-            15,
-            "info".to_string(),
-            Terminal::Ongoing,
-            1,
-        );
+        let experience1 = Experience::new(10, 5.5, 2, 15, "info".to_string(), Terminal::Ongoing, 1);
 
-        // Since Experience derives Copy, we can copy it directly
-        let experience2 = experience1;
+        let experience2 = experience1.clone();
 
-        // Both should have the same values
         assert_eq!(experience1.curr_state, experience2.curr_state);
         assert_eq!(experience1.action, experience2.action);
         assert_eq!(experience1.reward, experience2.reward);
@@ -72,7 +54,8 @@ mod tests {
     fn test_experience_different_terminal_states() {
         // Test with different terminal states
         let exp_ongoing = Experience::new(0, 1.0, 1, 1, "info".to_string(), Terminal::Ongoing, 1);
-        let exp_terminate = Experience::new(0, 1.0, 1, 1, "info".to_string(), Terminal::Terminate, 1);
+        let exp_terminate =
+            Experience::new(0, 1.0, 1, 1, "info".to_string(), Terminal::Terminate, 1);
         let exp_truncate = Experience::new(0, 1.0, 1, 1, "info".to_string(), Terminal::Truncate, 1);
         let exp_both = Experience::new(0, 1.0, 1, 1, "info".to_string(), Terminal::Both, 1);
 
@@ -85,8 +68,24 @@ mod tests {
     #[test]
     fn test_experience_different_values() {
         // Create experiences with different values to ensure fields are properly stored
-        let exp1 = Experience::new(100, 10.0, 5, 105, "info1".to_string(), Terminal::Ongoing, 10);
-        let exp2 = Experience::new(200, 20.0, 8, 208, "info2".to_string(), Terminal::Terminate, 20);
+        let exp1 = Experience::new(
+            100,
+            10.0,
+            5,
+            105,
+            "info1".to_string(),
+            Terminal::Ongoing,
+            10,
+        );
+        let exp2 = Experience::new(
+            200,
+            20.0,
+            8,
+            208,
+            "info2".to_string(),
+            Terminal::Terminate,
+            20,
+        );
 
         assert_eq!(exp1.curr_state, 100);
         assert_eq!(exp1.action, 5);
@@ -110,20 +109,19 @@ mod tests {
         let exp1 = Experience::new(5, 2.5, 1, 6, "info".to_string(), Terminal::Ongoing, 1);
         let exp2 = Experience::new(5, 2.5, 1, 6, "info".to_string(), Terminal::Ongoing, 1);
 
-        // Since Experience implements PartialEq, we can compare them directly
         assert_eq!(exp1, exp2);
     }
 
     #[test]
     fn test_experience_with_negative_values() {
         let experience = Experience::new(
-            -5,           // curr_state
-            -2.5,         // reward (can be negative)
-            -1,           // action
-            -6,           // next_state
-            "negative_info".to_string(), // info
-            Terminal::Truncate,  // terminal
-            100,          // step
+            -5,
+            -2.5,
+            -1,
+            -6,
+            "negative_info".to_string(),
+            Terminal::Truncate,
+            100,
         );
 
         assert_eq!(experience.curr_state, -5);
@@ -156,3 +154,4 @@ mod tests {
         assert_eq!(experience.step, u32::MAX);
     }
 }
+
