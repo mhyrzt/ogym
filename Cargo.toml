@@ -1,8 +1,16 @@
 [package]
 name = "ogym"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 authors = ["Mahyar Riazati <mhyrzt@gmail.com>"]
+description = "A Rust-native reinforcement learning framework inspired by OpenAI's Gym"
+homepage = "https://github.com/mhyrzt/ogym"
+repository = "https://github.com/mhyrzt/ogym"
+readme = "README.md"
+license = "MIT"
+keywords = ["reinforcement-learning", "gym", "ai", "machine-learning", "rl"]
+categories = ["science", "algorithms", "simulation"]
+documentation = "https://docs.rs/ogym"
 
 [dependencies]
 nalgebra = "0.33.2"
@@ -14,3 +22,4 @@ serde_json = "1.0"
 thiserror = "2.0.12"
 anyhow = "1.0.100"
 mujoco-rs-sys = "0.0.4"
+rayon = "1.10"

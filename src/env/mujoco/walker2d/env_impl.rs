@@ -1,7 +1,7 @@
 use super::env::MujocoWalker2dEnv;
 use crate::env::environment::{Environment, Error, Experience, Terminal};
 use nalgebra::DVector;
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 type Action = DVector<f64>;
 type State = DVector<f64>;

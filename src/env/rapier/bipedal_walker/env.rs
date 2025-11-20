@@ -1,13 +1,13 @@
 use crate::env::environment::{Environment, Error, Experience};
 use crate::env::rapier::utils::PhysicsWorld as GeneralPhysicsWorld;
 use nalgebra::{Point2, SVector};
-use rand::SeedableRng;
 use rand::rngs::StdRng;
+use rand::SeedableRng;
 use rapier2d::prelude::*;
 
 use super::config::BipedalWalkerConfig;
 use super::terrain::TerrainGenerator;
-use super::utils::{LegData, BipedalWalkerPhysicsExt};
+use super::utils::{BipedalWalkerPhysicsExt, LegData};
 
 const STATE_SIZE: usize = 24;
 

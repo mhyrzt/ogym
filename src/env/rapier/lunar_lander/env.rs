@@ -5,7 +5,7 @@ use crate::{
     },
     spaces::{Boxed, EnvSpace, Mixed, MixedItem},
 };
-use nalgebra::{Isometry2, SVector, Vector2, point};
+use nalgebra::{point, Isometry2, SVector, Vector2};
 use rand::Rng;
 use rapier2d::prelude::{
     ColliderBuilder, ColliderHandle, CollisionEvent, ImpulseJointHandle, InteractionGroups,

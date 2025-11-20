@@ -3,7 +3,7 @@ use crate::{
     env::{Environment, Error},
     spaces::{Boxed, EnvSpace, Mixed, MixedItem, Space},
 };
-use nalgebra::{SVector, DMatrix, DVector};
+use nalgebra::{DMatrix, DVector, SVector};
 use rayon::prelude::*;
 
 const FOUR_THIRDS: f64 = 4.0 / 3.0;
@@ -20,7 +20,7 @@ pub struct VectorizedCartPole {
     num_envs: usize,
     t: Vec<u32>,
     config: CartPoleConfig,
-    states: Option<DMatrix<f64>>, // Shape: [STATE_SIZE, num_envs]
+    states: Option<DMatrix<f64>>,
     pub space: EnvSpace<StateSpace, ActionSpace>,
 }
 
@@ -52,35 +52,36 @@ impl VectorizedCartPole {
         })
     }
 
-    // Vectorized acceleration computation using SIMD-friendly operations
-    fn compute_accelerations(&self, states: &DMatrix<f64>, forces: &DVector<f64>) -> (DVector<f64>, DVector<f64>) {
+    fn compute_accelerations(
+        &self,
+        states: &DMatrix<f64>,
+        forces: &DVector<f64>,
+    ) -> (DVector<f64>, DVector<f64>) {
         let theta_row = states.row(2);
         let omega_row = states.row(3);
-        
-        // Use nalgebra's vectorized operations
+
         let sin_theta = theta_row.map(|x| x.sin());
         let cos_theta = theta_row.map(|x| x.cos());
-        
+
         let m = self.config.mc + self.config.mp;
         let mpl = self.config.mp * self.config.l;
-        
-        // Vectorized computation
+
         let omega_squared = omega_row.component_mul(&omega_row);
         let t = (forces + mpl * omega_squared.component_mul(&sin_theta)) / m;
-        
+
         let num = self.config.g * &sin_theta - cos_theta.component_mul(&t);
         let cos_theta_squared = cos_theta.component_mul(&cos_theta);
         let den = self.config.l * (FOUR_THIRDS - self.config.mp * cos_theta_squared / m);
-        
+
         let theta_acc = num.component_div(&den);
         let x_acc = &t - (mpl / m) * theta_acc.component_mul(&cos_theta);
-        
+
         (x_acc.into_owned(), theta_acc.into_owned())
     }
 
     fn integrate_batch(&self, states: &DMatrix<f64>, forces: &DVector<f64>) -> DMatrix<f64> {
         let (x_acc, theta_acc) = self.compute_accelerations(states, forces);
-        
+
         match self.config.integrator {
             KinematicsIntegrator::Euler => self.euler_batch(states, &x_acc, &theta_acc),
             KinematicsIntegrator::SemiImplicitEuler => {
@@ -89,39 +90,46 @@ impl VectorizedCartPole {
         }
     }
 
-    fn euler_batch(&self, states: &DMatrix<f64>, x_acc: &DVector<f64>, theta_acc: &DVector<f64>) -> DMatrix<f64> {
+    fn euler_batch(
+        &self,
+        states: &DMatrix<f64>,
+        x_acc: &DVector<f64>,
+        theta_acc: &DVector<f64>,
+    ) -> DMatrix<f64> {
         let mut new_states = DMatrix::zeros(STATE_SIZE, self.num_envs);
         let tau = self.config.tau;
-        
-        // Vectorized Euler integration
+
         new_states.set_row(0, &(states.row(0) + tau * states.row(1)));
         new_states.set_row(1, &(states.row(1) + tau * x_acc.transpose()));
         new_states.set_row(2, &(states.row(2) + tau * states.row(3)));
         new_states.set_row(3, &(states.row(3) + tau * theta_acc.transpose()));
-        
+
         new_states
     }
 
-    fn semi_implicit_euler_batch(&self, states: &DMatrix<f64>, x_acc: &DVector<f64>, theta_acc: &DVector<f64>) -> DMatrix<f64> {
+    fn semi_implicit_euler_batch(
+        &self,
+        states: &DMatrix<f64>,
+        x_acc: &DVector<f64>,
+        theta_acc: &DVector<f64>,
+    ) -> DMatrix<f64> {
         let mut new_states = DMatrix::zeros(STATE_SIZE, self.num_envs);
         let tau = self.config.tau;
-        
-        // Update velocities first
+
         let new_v = states.row(1) + tau * x_acc.transpose();
         let new_omega = states.row(3) + tau * theta_acc.transpose();
-        
-        // Then update positions with new velocities
+
         new_states.set_row(0, &(states.row(0) + tau * &new_v));
         new_states.set_row(1, &new_v);
         new_states.set_row(2, &(states.row(2) + tau * &new_omega));
         new_states.set_row(3, &new_omega);
-        
+
         new_states
     }
 
     fn forces_from_actions(&self, actions: &[Action]) -> Result<DVector<f64>, Error> {
         let mut forces = DVector::zeros(self.num_envs);
-        
+
         for (i, action) in actions.iter().enumerate() {
             forces[i] = match (&self.space.action, action) {
                 (Mixed::Discrete(space), Action::Discrete(act)) => {
@@ -135,32 +143,33 @@ impl VectorizedCartPole {
                 _ => return Err(Error::InvalidAction),
             };
         }
-        
+
         Ok(forces)
     }
 
     pub fn reset_all(&mut self, seed: Option<u64>) -> Result<Vec<State>, Error> {
         let mut states = DMatrix::zeros(STATE_SIZE, self.num_envs);
-        
-        // Reset each environment with different seeds if provided
+
         for i in 0..self.num_envs {
             let env_seed = seed.map(|s| s.wrapping_add(i as u64));
             let state = self.space.state.uniform(env_seed, -5e-2, 5e-2)?;
             states.set_column(i, &state);
         }
-        
+
         self.t.fill(0);
         self.states = Some(states.clone());
-        
-        // Convert back to vector of states
+
         let result: Vec<State> = (0..self.num_envs)
             .map(|i| State::from_column_slice(states.column(i).as_slice()))
             .collect();
-        
+
         Ok(result)
     }
 
-    pub fn step_all(&mut self, actions: &[Action]) -> Result<(Vec<State>, Vec<f64>, Vec<bool>, Vec<Option<()>>), Error> {
+    pub fn step_all(
+        &mut self,
+        actions: &[Action],
+    ) -> Result<(Vec<State>, Vec<f64>, Vec<bool>, Vec<Option<()>>), Error> {
         if actions.len() != self.num_envs {
             return Err(Error::InvalidAction);
         }
@@ -168,21 +177,18 @@ impl VectorizedCartPole {
         let states = self.states.as_ref().ok_or(Error::NotInitialized)?;
         let forces = self.forces_from_actions(actions)?;
         let new_states = self.integrate_batch(states, &forces);
-        
-        // Update time steps
+
         for t in &mut self.t {
             *t += 1;
         }
-        
+
         self.states = Some(new_states.clone());
-        
-        // Convert results
+
         let states_vec: Vec<State> = (0..self.num_envs)
             .map(|i| State::from_column_slice(new_states.column(i).as_slice()))
             .collect();
-        
-        let rewards = vec![1.0; self.num_envs]; // All environments get reward 1.0
-        
+
+        let rewards = vec![1.0; self.num_envs];
         let dones: Vec<bool> = (0..self.num_envs)
             .map(|i| {
                 let state = new_states.column(i);
@@ -191,9 +197,9 @@ impl VectorizedCartPole {
                     || state[2].abs() > self.config.theta_max
             })
             .collect();
-        
+
         let infos = vec![None; self.num_envs];
-        
+
         Ok((states_vec, rewards, dones, infos))
     }
 
@@ -215,13 +221,16 @@ impl VectorizedCartPole {
 
 // Optional: Parallel processing version using Rayon
 impl VectorizedCartPole {
-    pub fn step_all_parallel(&mut self, actions: &[Action]) -> Result<(Vec<State>, Vec<f64>, Vec<bool>, Vec<Option<()>>), Error> {
+    pub fn step_all_parallel(
+        &mut self,
+        actions: &[Action],
+    ) -> Result<(Vec<State>, Vec<f64>, Vec<bool>, Vec<Option<()>>), Error> {
         if actions.len() != self.num_envs {
             return Err(Error::InvalidAction);
         }
 
         let states = self.states.as_ref().ok_or(Error::NotInitialized)?;
-        
+
         // Process in parallel chunks for very large numbers of environments
         let chunk_size = (self.num_envs / rayon::current_num_threads()).max(1);
         let results: Result<Vec<_>, Error> = (0..self.num_envs)
@@ -242,7 +251,7 @@ impl VectorizedCartPole {
                         }
                         _ => return Err(Error::InvalidAction),
                     };
-                    
+
                     let (x_acc, theta_acc) = self.compute_acceleration_single(&state, &force);
                     let new_state = self.integrate_single(&state, &x_acc, &theta_acc);
                     chunk_results.push((new_state, i));
@@ -253,7 +262,7 @@ impl VectorizedCartPole {
 
         // Update states and compute results...
         // (Implementation continues with result aggregation)
-        
+
         todo!("Complete parallel implementation")
     }
 

@@ -1,5 +1,5 @@
 use mujoco_rs_sys::no_render;
-use mujoco_rust::{Model, Simulation, State, model::ObjType};
+use mujoco_rust::{model::ObjType, Model, Simulation, State};
 use nalgebra as na;
 
 use crate::env::environment::Error;

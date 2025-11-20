@@ -1,9 +1,9 @@
 use super::{error::Error, space::Space};
 use nalgebra::SVector;
 use rand::{
-    SeedableRng,
     distr::{Distribution, Uniform},
     rngs::StdRng,
+    SeedableRng,
 };
 
 #[derive(Debug, Clone)]

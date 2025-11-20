@@ -1,6 +1,6 @@
-use nalgebra::DVector;
-use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use super::config::SwimmerConfig;
+use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
+use nalgebra::DVector;
 
 pub struct MujocoSwimmerEnv {
     pub env: MjEnv,

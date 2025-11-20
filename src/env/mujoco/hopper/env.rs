@@ -1,6 +1,6 @@
-use nalgebra::DVector;
-use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use super::config::HopperConfig;
+use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
+use nalgebra::DVector;
 
 pub struct MujocoHopperEnv {
     pub env: MjEnv,

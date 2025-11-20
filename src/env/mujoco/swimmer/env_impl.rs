@@ -4,7 +4,7 @@ use crate::env::{
     mujoco::mjenv::MjEnv,
 };
 use nalgebra::DVector;
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 // Define type aliases for clarity
 type Action = DVector<f64>;

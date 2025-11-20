@@ -1,4 +1,4 @@
-use super::{MountainCarConfig, config::MountainCarReward};
+use super::{config::MountainCarReward, MountainCarConfig};
 use crate::{
     env::environment::{Environment, Error, Experience},
     spaces::{Boxed, EnvSpace, Mixed, MixedItem, Space},

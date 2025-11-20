@@ -2,4 +2,4 @@ mod config;
 mod env;
 
 pub use config::MountainCarConfig;
-pub use env::{ACTION_SIZE, ActionSpace, MountainCar, STATE_SIZE, StateSpace};
+pub use env::{ActionSpace, MountainCar, StateSpace, ACTION_SIZE, STATE_SIZE};

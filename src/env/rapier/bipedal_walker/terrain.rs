@@ -168,8 +168,9 @@ impl TerrainGenerator {
             counter = if counter > 0 { counter - 1 } else { 0 };
 
             if counter == 0 {
-                counter =
-                    rng.random_range((self.config.terrain_grass / 2) as i32..self.config.terrain_grass as i32);
+                counter = rng.random_range(
+                    (self.config.terrain_grass / 2) as i32..self.config.terrain_grass as i32,
+                );
                 if state == TerrainState::Grass && hardcore {
                     state = match rng.random_range(1..4) {
                         1 => TerrainState::Stump,

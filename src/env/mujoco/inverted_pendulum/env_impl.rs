@@ -4,7 +4,7 @@ use crate::env::{
     mujoco::mjenv::MjEnv,
 };
 use nalgebra::DVector;
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 // Define type aliases for clarity
 type Action = DVector<f64>;
@@ -119,7 +119,11 @@ impl MujocoInvertedPendulumEnv {
     }
 
     fn _calculate_reward(&self, terminated: bool) -> Result<f64, Error> {
-        if terminated { Ok(0.0) } else { Ok(1.0) }
+        if terminated {
+            Ok(0.0)
+        } else {
+            Ok(1.0)
+        }
     }
 
     fn _generate_info(&self, reward: f64) -> Result<Info, Error> {

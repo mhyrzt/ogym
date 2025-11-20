@@ -2,9 +2,9 @@ use std::f64::consts::{PI, TAU};
 
 use nalgebra::SVector;
 use rand::{
-    Rng, SeedableRng,
     distr::{Distribution, Uniform},
     rngs::StdRng,
+    Rng, SeedableRng,
 };
 
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
     spaces::{Boxed, EnvSpace, Mixed, MixedItem, Space},
 };
 
-use super::{AcrobotConfig, config::DynamicsMode};
+use super::{config::DynamicsMode, AcrobotConfig};
 
 const ACTION_SIZE: usize = 1; // Discrete(3) or optionally continuous
 const RAW_STATE_SIZE: usize = 4;

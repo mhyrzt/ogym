@@ -8,7 +8,7 @@ pub struct AntConfig {
     pub ctrl_cost_weight: f64,
     pub contact_cost_weight: f64,
     pub healthy_reward: f64,
-    pub main_body: u32,  // Using u32 instead of int | str union type
+    pub main_body: u32, // Using u32 instead of int | str union type
     pub terminate_when_unhealthy: bool,
     pub healthy_z_range: (f64, f64),
     pub contact_force_range: (f64, f64),

@@ -6,7 +6,7 @@ use crate::{
     spaces::{Boxed, EnvSpace, Mixed, MixedItem, Space},
 };
 use nalgebra::SVector;
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 const STATE_SIZE: usize = 3;
 const ACTION_SIZE: usize = 1;
