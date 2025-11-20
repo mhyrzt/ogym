@@ -1,8 +1,5 @@
-use super::{config::InvertedDoublePendulumConfig, env::MujocoInvertedDoublePendulumEnv};
-use crate::env::{
-    environment::{Environment, Error, Experience, Terminal},
-    mujoco::mjenv::MjEnv,
-};
+use super::env::MujocoInvertedDoublePendulumEnv;
+use crate::env::environment::{Environment, Error, Experience, Terminal};
 use nalgebra::DVector;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 

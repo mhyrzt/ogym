@@ -1,4 +1,3 @@
-use nalgebra::DVector;
 
 #[derive(Debug, Clone)]
 pub struct InvertedDoublePendulumConfig {

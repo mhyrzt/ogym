@@ -1,6 +1,5 @@
 use super::config::HalfCheetahConfig;
 use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
-use nalgebra::DVector;
 
 pub struct MujocoHalfCheetahEnv {
     pub env: MjEnv,

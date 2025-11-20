@@ -1,6 +1,5 @@
 use super::config::InvertedDoublePendulumConfig;
 use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
-use nalgebra::DVector;
 
 pub struct MujocoInvertedDoublePendulumEnv {
     pub env: MjEnv,

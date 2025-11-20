@@ -1,6 +1,5 @@
 use super::config::PusherConfig;
 use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
-use nalgebra::DVector;
 
 pub struct MujocoPusherEnv {
     pub env: MjEnv,

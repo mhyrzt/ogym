@@ -1,8 +1,5 @@
-use super::{config::HopperConfig, env::MujocoHopperEnv};
-use crate::env::{
-    environment::{Environment, Error, Experience, Terminal},
-    mujoco::mjenv::MjEnv,
-};
+use super::env::MujocoHopperEnv;
+use crate::env::environment::{Environment, Error, Experience, Terminal};
 use nalgebra::DVector;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 

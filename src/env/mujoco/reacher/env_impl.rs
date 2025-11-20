@@ -1,8 +1,5 @@
-use super::{config::ReacherConfig, env::MujocoReacherEnv};
-use crate::env::{
-    environment::{Environment, Error, Experience, Terminal},
-    mujoco::mjenv::MjEnv,
-};
+use super::env::MujocoReacherEnv;
+use crate::env::environment::{Environment, Error, Experience, Terminal};
 use nalgebra::DVector;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 

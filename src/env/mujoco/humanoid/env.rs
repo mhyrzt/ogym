@@ -1,6 +1,5 @@
 use super::config::HumanoidConfig;
 use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
-use nalgebra::DVector;
 
 pub struct MujocoHumanoidEnv {
     pub env: MjEnv,
