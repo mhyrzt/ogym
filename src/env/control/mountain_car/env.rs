@@ -41,7 +41,7 @@ impl MountainCar {
         })
     }
 
-    fn reward(&self, action: &Action) -> f64 {
+    pub fn reward(&self, action: &Action) -> f64 {
         -1.0 - match self.config.reward {
             MountainCarReward::Constant => 0.0,
             MountainCarReward::ActionPenalty => match action {
@@ -51,14 +51,14 @@ impl MountainCar {
         }
     }
 
-    fn force(&self, action: &Action) -> f64 {
+    pub fn force(&self, action: &Action) -> f64 {
         match action {
             MixedItem::Discrete(a) => *a as f64 - 1.0,
             MixedItem::Continuous(a) => a[0],
         }
     }
 
-    fn clamp_velocity_at_boundary(&self, x: &f64, v: &f64) -> f64 {
+    pub fn clamp_velocity_at_boundary(&self, x: &f64, v: &f64) -> f64 {
         if *x <= self.config.min_x && *v < 0.0 {
             0.0
         } else {
