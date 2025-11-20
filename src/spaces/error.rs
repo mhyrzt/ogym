@@ -1,4 +1,4 @@
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Clone, Copy, PartialEq)]
 pub enum Error {
     #[error(
         "ShapeMismatch: The `low` and `high` tensors must have the exact same shape. Ensure both inputs are aligned dimensionally."

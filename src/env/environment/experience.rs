@@ -1,6 +1,6 @@
 use super::terminal::Terminal;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Experience<S, I, A> {
     pub curr_state: S,
     pub action: A,

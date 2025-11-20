@@ -1,4 +1,4 @@
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Clone, PartialEq)]
 pub enum Error {
     #[error("Invalid Max Step")]
     InvalidMaxStep,
