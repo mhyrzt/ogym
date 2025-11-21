@@ -117,6 +117,11 @@ impl LunarLanderConfig {
         self
     }
 
+    pub fn with_initial_random(mut self, init_rand: f32) -> Self {
+        self.initial_random = init_rand;
+        self
+    }
+
     pub fn with_turbulence_strength(mut self, turbulence: f32) -> Self {
         self.turbulence_strength = turbulence;
         self

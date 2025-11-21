@@ -550,7 +550,7 @@ mod tests {
 
     #[test]
     fn test_step_gravity() {
-        let config = get_test_config();
+        let config = LunarLanderConfig::default().with_initial_random(f32::EPSILON);
         let mut env = LunarLander::new(config).unwrap();
         eprintln!("Config: {:?}", config);
 
