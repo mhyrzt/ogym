@@ -104,10 +104,141 @@ impl BipedalWalkerConfig {
         self
     }
 
+    pub fn with_scale(mut self, scale: f32) -> Self {
+        self.scale = scale;
+        self
+    }
+
+    pub fn with_hull_vertices(mut self, vertices: Vec<(f32, f32)>) -> Self {
+        self.hull_vertices = vertices;
+        self
+    }
+
     pub fn get_scaled_hull_vertices(&self) -> Vec<Vector2<f32>> {
         self.hull_vertices
             .iter()
             .map(|(x, y)| Vector2::new(x / self.scale, y / self.scale))
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nalgebra::Vector2;
+
+    #[test]
+    fn test_default_configuration_values() {
+        let config = BipedalWalkerConfig::default();
+
+        assert_eq!(config.fps, 50);
+        assert_eq!(config.scale, 30.0);
+        assert_eq!(config.motors_torque, 80.0);
+        assert_eq!(config.speed_hip, 4.0);
+        assert_eq!(config.speed_knee, 6.0);
+
+        // Calculated fields based on scale 30.0
+        assert_eq!(config.lidar_range, 160.0 / 30.0);
+        assert_eq!(config.lidar_count, 10);
+        assert_eq!(config.initial_random, 5.0);
+
+        assert_eq!(config.hull_vertices.len(), 5);
+        assert_eq!(config.hull_vertices[0], (-30.0, 9.0));
+
+        assert_eq!(config.leg_down, -8.0 / 30.0);
+        assert_eq!(config.leg_w, 8.0 / 30.0);
+        assert_eq!(config.leg_h, 34.0 / 30.0);
+
+        assert_eq!(config.viewport_w, 600.0);
+        assert_eq!(config.viewport_h, 400.0);
+
+        assert_eq!(config.terrain_step, 14.0 / 30.0);
+        assert_eq!(config.terrain_length, 200);
+        assert_eq!(config.terrain_height, 400.0 / 30.0 / 4.0);
+        assert_eq!(config.terrain_grass, 10);
+        assert_eq!(config.terrain_startpad, 20);
+        assert_eq!(config.friction, 2.5);
+
+        assert_eq!(config.max_episode_steps, 1600);
+        assert!(!config.hardcore);
+        assert!(!config.control_speed);
+    }
+
+    #[test]
+    fn test_new_same_as_default() {
+        let config_new = BipedalWalkerConfig::new();
+        let config_default = BipedalWalkerConfig::default();
+
+        // Using debug format for comparison since partialeq isn't derived
+        assert_eq!(format!("{:?}", config_new), format!("{:?}", config_default));
+    }
+
+    #[test]
+    fn test_builder_methods() {
+        let config = BipedalWalkerConfig::new()
+            .with_hardcore(true)
+            .with_control_speed(true)
+            .with_fps(60)
+            .with_max_steps(2000);
+
+        assert!(config.hardcore);
+        assert!(config.control_speed);
+        assert_eq!(config.fps, 60);
+        assert_eq!(config.max_episode_steps, 2000);
+    }
+
+    #[test]
+    fn test_builder_chaining_order() {
+        let config = BipedalWalkerConfig::new().with_fps(100).with_fps(30);
+
+        assert_eq!(config.fps, 30);
+    }
+
+    #[test]
+    fn test_get_scaled_hull_vertices() {
+        let config = BipedalWalkerConfig::default()
+            .with_scale(2.0)
+            .with_hull_vertices(vec![(10.0, 20.0), (4.0, -8.0)]);
+
+        let scaled = config.get_scaled_hull_vertices();
+
+        assert_eq!(scaled.len(), 2);
+        assert_eq!(scaled[0], Vector2::new(5.0, 10.0));
+        assert_eq!(scaled[1], Vector2::new(2.0, -4.0));
+    }
+
+    #[test]
+    fn test_default_scaled_hull_vertices() {
+        let config = BipedalWalkerConfig::default();
+        let scaled = config.get_scaled_hull_vertices();
+        let scale = 30.0;
+
+        assert_eq!(scaled.len(), 5);
+        assert_eq!(scaled[0], Vector2::new(-30.0 / scale, 9.0 / scale));
+        assert_eq!(scaled[1], Vector2::new(6.0 / scale, 9.0 / scale));
+        assert_eq!(scaled[2], Vector2::new(34.0 / scale, 1.0 / scale));
+        assert_eq!(scaled[3], Vector2::new(34.0 / scale, -8.0 / scale));
+        assert_eq!(scaled[4], Vector2::new(-30.0 / scale, -8.0 / scale));
+    }
+
+    #[test]
+    fn test_serialization() {
+        let config = BipedalWalkerConfig::default();
+        let serialized = serde_json::to_string(&config).expect("Failed to serialize");
+        let deserialized: BipedalWalkerConfig =
+            serde_json::from_str(&serialized).expect("Failed to deserialize");
+
+        assert_eq!(config.fps, deserialized.fps);
+        assert_eq!(config.scale, deserialized.scale);
+        assert_eq!(config.hull_vertices.len(), deserialized.hull_vertices.len());
+    }
+
+    #[test]
+    fn test_clone() {
+        let config = BipedalWalkerConfig::new();
+        let cloned = config.clone();
+
+        assert_eq!(config.fps, cloned.fps);
+        assert_eq!(config.hull_vertices.len(), cloned.hull_vertices.len());
     }
 }

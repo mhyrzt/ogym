@@ -2,6 +2,8 @@ use nalgebra::{Point2, Vector2};
 use rand::Rng;
 use rapier2d::prelude::*;
 
+use crate::env::rapier::bipedal_walker::config::BipedalWalkerConfig;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TerrainState {
     Grass,
@@ -11,11 +13,11 @@ enum TerrainState {
 }
 
 pub struct TerrainGenerator {
-    config: super::config::BipedalWalkerConfig,
+    config: BipedalWalkerConfig,
 }
 
 impl TerrainGenerator {
-    pub fn new(config: super::config::BipedalWalkerConfig) -> Self {
+    pub fn new(config: BipedalWalkerConfig) -> Self {
         Self { config }
     }
 
@@ -104,10 +106,7 @@ impl TerrainGenerator {
                     let poly = vec![
                         Vector2::new(x, y),
                         Vector2::new(x + counter as f32 * step, y),
-                        Vector2::new(
-                            x + counter as f32 * step,
-                            y + counter as f32 * step,
-                        ),
+                        Vector2::new(x + counter as f32 * step, y + counter as f32 * step),
                         Vector2::new(x, y + counter as f32 * step),
                     ];
                     self.create_polygon_terrain(
@@ -155,7 +154,7 @@ impl TerrainGenerator {
                 }
 
                 TerrainState::Stairs if !oneshot => {
-                    let s = (stair_steps * stair_width) as i32 - counter as i32 - stair_height;
+                    let s = (stair_steps * stair_width) - counter - stair_height;
                     let n = s as f32 / stair_width as f32;
                     y = original_y + n * stair_height as f32 * self.config.terrain_step;
                 }
@@ -188,8 +187,8 @@ impl TerrainGenerator {
 
         // Create terrain edges (the actual walking surface)
         for i in 0..(self.config.terrain_length - 1) {
-            let p1 = Point2::new(terrain_x[i] as f32, terrain_y[i] as f32);
-            let p2 = Point2::new(terrain_x[i + 1] as f32, terrain_y[i + 1] as f32);
+            let p1 = Point2::new(terrain_x[i], terrain_y[i]);
+            let p2 = Point2::new(terrain_x[i + 1], terrain_y[i + 1]);
 
             let rigid_body = RigidBodyBuilder::fixed()
                 .translation(vector![0.0, 0.0])
@@ -197,7 +196,7 @@ impl TerrainGenerator {
             let handle = rigid_body_set.insert(rigid_body);
 
             let collider = ColliderBuilder::segment(p1, p2)
-                .friction(self.config.friction as f32)
+                .friction(self.config.friction)
                 .collision_groups(InteractionGroups::new(Group::GROUP_1, Group::ALL))
                 .build();
             collider_set.insert_with_parent(collider, handle, rigid_body_set);
@@ -220,14 +219,141 @@ impl TerrainGenerator {
             .build();
         let handle = rigid_body_set.insert(rigid_body);
 
-        // Convert Vector2 to Point2 for convex hull
         let points: Vec<Point2<f32>> = vertices.iter().map(|v| Point2::new(v.x, v.y)).collect();
         let collider = ColliderBuilder::convex_hull(&points)
             .unwrap()
-            .friction(self.config.friction as f32)
+            .friction(self.config.friction)
             .build();
         collider_set.insert_with_parent(collider, handle, rigid_body_set);
 
         handles.push(handle);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::rngs::mock::StepRng;
+    use rapier2d::prelude::*;
+
+    #[test]
+    fn test_terrain_generator_creation() {
+        let config = BipedalWalkerConfig::default();
+        let generator = TerrainGenerator::new(config.clone());
+
+        // Since generator just holds config, we verify indirectly via success
+        assert_eq!(generator.config.terrain_length, 200);
+    }
+
+    #[test]
+    fn test_generate_basic_structure() {
+        let config = BipedalWalkerConfig::default();
+        let generator = TerrainGenerator::new(config);
+
+        let mut rigid_body_set = RigidBodySet::new();
+        let mut collider_set = ColliderSet::new();
+        let mut rng = StepRng::new(0, 1);
+
+        let (handles, x_coords, y_coords) =
+            generator.generate(&mut rng, &mut rigid_body_set, &mut collider_set, false);
+
+        assert!(!handles.is_empty());
+        assert_eq!(x_coords.len(), 200);
+        assert_eq!(y_coords.len(), 200);
+
+        assert!(!rigid_body_set.is_empty());
+        assert!(!collider_set.is_empty());
+
+        assert!(handles.len() >= 199);
+    }
+
+    #[test]
+    fn test_generate_hardcore_mode() {
+        let config = BipedalWalkerConfig::default();
+        let generator = TerrainGenerator::new(config);
+
+        let mut rigid_body_set = RigidBodySet::new();
+        let mut collider_set = ColliderSet::new();
+        let mut rng = StepRng::new(42, 1); // Different seed to encourage feature generation
+
+        let (handles, _, _) = generator.generate(
+            &mut rng,
+            &mut rigid_body_set,
+            &mut collider_set,
+            true, // Hardcore enabled
+        );
+
+        assert!(!handles.is_empty());
+        assert!(!rigid_body_set.is_empty());
+    }
+
+    #[test]
+    fn test_coordinate_monotonicity() {
+        let config = BipedalWalkerConfig::default();
+        let generator = TerrainGenerator::new(config.clone());
+
+        let mut rigid_body_set = RigidBodySet::new();
+        let mut collider_set = ColliderSet::new();
+        let mut rng = StepRng::new(0, 1);
+
+        let (_, x_coords, _) =
+            generator.generate(&mut rng, &mut rigid_body_set, &mut collider_set, false);
+
+        for i in 0..x_coords.len() - 1 {
+            assert!(x_coords[i + 1] > x_coords[i]);
+            let step = x_coords[i + 1] - x_coords[i];
+            assert!((step - config.terrain_step).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn test_create_polygon_terrain() {
+        let config = BipedalWalkerConfig::default();
+        let generator = TerrainGenerator::new(config);
+
+        let mut rigid_body_set = RigidBodySet::new();
+        let mut collider_set = ColliderSet::new();
+        let mut handles = Vec::new();
+
+        let poly = vec![
+            Vector2::new(0.0, 0.0),
+            Vector2::new(1.0, 0.0),
+            Vector2::new(1.0, 1.0),
+            Vector2::new(0.0, 1.0),
+        ];
+
+        generator.create_polygon_terrain(
+            &mut rigid_body_set,
+            &mut collider_set,
+            &poly,
+            &mut handles,
+        );
+
+        assert_eq!(handles.len(), 1);
+        assert_eq!(rigid_body_set.len(), 1);
+        assert_eq!(collider_set.len(), 1);
+
+        let handle = handles[0];
+        let rb = rigid_body_set.get(handle).unwrap();
+        assert!(rb.is_fixed());
+    }
+
+    #[test]
+    fn test_startpad_flatness() {
+        let config = BipedalWalkerConfig::default();
+        let startpad_len = config.terrain_startpad;
+        let generator = TerrainGenerator::new(config);
+
+        let mut rigid_body_set = RigidBodySet::new();
+        let mut collider_set = ColliderSet::new();
+        let mut rng = StepRng::new(123, 1);
+
+        let (_, _, y_coords) =
+            generator.generate(&mut rng, &mut rigid_body_set, &mut collider_set, false);
+
+        let initial_y = y_coords[0];
+        for y in y_coords.iter().take(startpad_len).skip(1) {
+            assert!((*y - initial_y).abs() < 5.0);
+        }
     }
 }
