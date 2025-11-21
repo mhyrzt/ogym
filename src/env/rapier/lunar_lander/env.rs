@@ -497,7 +497,6 @@ impl Environment for LunarLander {
 mod tests {
     use super::*;
     use crate::spaces::MixedItem;
-    
 
     // Helper to get a standard config
     fn get_test_config() -> LunarLanderConfig {
@@ -551,25 +550,32 @@ mod tests {
 
     #[test]
     fn test_step_gravity() {
-        // Test that doing nothing results in falling (y-velocity decreases)
         let config = get_test_config();
         let mut env = LunarLander::new(config).unwrap();
+        eprintln!("Config: {:?}", config);
 
+        // Take several steps doing nothing to ensure gravity effect is clear
         let initial_state = env.state().unwrap();
-        let initial_vy = initial_state[3];
+        let initial_y = initial_state[1];
 
-        // Action 0 is usually "do nothing" in discrete
         let action = MixedItem::Discrete(0);
-        let experience = env.step(action).unwrap();
 
-        let next_state = experience.next_state;
-        let next_vy = next_state[3];
+        // Step multiple times to accumulate noticeable gravity effect
+        for _ in 0..10 {
+            env.step(action).unwrap();
+        }
 
-        // Note: y-axis might be inverted or standard depending on rendering,
-        // but usually gravity pulls "down". In this config gravity is negative (-10.0).
-        // Velocity should become more negative.
-        assert!(next_vy < initial_vy, "Lander should fall due to gravity");
-        assert_eq!(env.t, 1);
+        let final_state = env.state().unwrap();
+        let final_y = final_state[1];
+
+        // Y position should decrease (falling down)
+        assert!(
+            final_y < initial_y,
+            "Lander should fall due to gravity. Initial Y: {}, Final Y: {}",
+            initial_y,
+            final_y
+        );
+        assert_eq!(env.t, 10);
     }
 
     #[test]
@@ -602,20 +608,29 @@ mod tests {
         let config = get_test_config().with_continuous_action();
         let mut env = LunarLander::new(config).unwrap();
 
+        // Let it fall for several frames to establish downward momentum
+        let no_action = MixedItem::Continuous(SVector::from_vec(vec![0.0, 0.0]));
+        for _ in 0..5 {
+            env.step(no_action).unwrap();
+        }
+
         let state_before = env.state().unwrap();
         let vy_before = state_before[3];
 
-        // Continuous action: [main_engine, side_engine]
-        // Range usually -1 to 1. Main engine > 0 triggers it.
-        let action = MixedItem::Continuous(SVector::from_vec(vec![1.0, 0.0]));
-        env.step(action).unwrap();
+        // Apply full main engine for multiple steps
+        let full_thrust = MixedItem::Continuous(SVector::from_vec(vec![1.0, 0.0]));
+        for _ in 0..5 {
+            env.step(full_thrust).unwrap();
+        }
 
         let state_after = env.state().unwrap();
         let vy_after = state_after[3];
 
         assert!(
             vy_after > vy_before,
-            "Continuous main engine should push lander upwards"
+            "Continuous main engine should push lander upwards. VY before: {}, VY after: {}",
+            vy_before,
+            vy_after
         );
     }
 
@@ -668,40 +683,52 @@ mod tests {
 
         let mut state = SVector::<f32, STATE_SIZE>::zeros();
 
-        // 1. Perfect hover at target (0,0 position, 0 velocity, upright)
-        // Helipad y is offset, so 0,0 in state roughly means target.
+        // 1. Good state: centered, close to target, no velocity, upright, on ground
         state[0] = 0.0; // X centered
-        state[1] = 1.0; // Y high up
+        state[1] = 0.0; // Y at target (not high up!)
         state[2] = 0.0; // VX
         state[3] = 0.0; // VY
-        state[4] = 0.0; // Angle
-        state[6] = 0.0; // Left Leg
-        state[7] = 0.0; // Right Leg
+        state[4] = 0.0; // Angle upright
+        state[5] = 0.0; // Angular velocity
+        state[6] = 1.0; // Left leg on ground (bonus!)
+        state[7] = 1.0; // Right leg on ground (bonus!)
 
-        let (reward_high, _) = env.calc_reward(&state, 0.0, 0.0);
+        // Compare shaping potentials (2nd return value) because the step reward (1st value)
+        // is 0 when prev_shaping is None.
+        let (_, shaping_good) = env.calc_reward(&state, 0.0, 0.0);
 
-        // 2. Tilted and fast moving away
-        state[0] = 0.5;
-        state[1] = 0.5;
-        state[2] = 1.0;
-        state[3] = -1.0;
+        // 2. Bad state: off-center, high up, moving fast, tilted, not on ground
+        state[0] = 0.8; // Far from center
+        state[1] = 0.8; // High up from target
+        state[2] = 2.0; // Moving horizontally
+        state[3] = -2.0; // Falling fast
         state[4] = 0.5; // Tilted
+        state[5] = 1.0; // Spinning
+        state[6] = 0.0; // Left leg not touching
+        state[7] = 0.0; // Right leg not touching
 
-        let (reward_low, _) = env.calc_reward(&state, 0.0, 0.0);
+        let (reward_bad, shaping_bad) = env.calc_reward(&state, 0.0, 0.0);
 
-        // Being stable and centered should be better (shaping is negative distance/penalty based)
-        // Note: The shaping calculation involves negative sqrts, so closer to 0 is less negative (higher).
         assert!(
-            reward_high > reward_low,
-            "Better state should yield higher shaping reward"
+            shaping_good > shaping_bad,
+            "Better state should yield higher shaping reward. Good: {}, Bad: {}",
+            shaping_good,
+            shaping_bad
         );
 
         // 3. Engine penalty
-        // Calculate reward for same state but with engine usage
-        let (reward_with_engine, _) = env.calc_reward(&state, 1.0, 0.0);
+        // reward_bad is 0.0 (no engine, prev_shaping is None).
+        // Engine use should result in negative reward here.
+        let (reward_with_main_engine, _) = env.calc_reward(&state, 1.0, 0.0);
+        let (reward_with_side_engine, _) = env.calc_reward(&state, 0.0, 1.0);
+
         assert!(
-            reward_with_engine < reward_low,
-            "Using engine should penalize reward"
+            reward_with_main_engine < reward_bad,
+            "Using main engine should penalize reward"
+        );
+        assert!(
+            reward_with_side_engine < reward_bad,
+            "Using side engine should penalize reward"
         );
     }
 

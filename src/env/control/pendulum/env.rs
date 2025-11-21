@@ -10,6 +10,7 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 
 const STATE_SIZE: usize = 3;
 const ACTION_SIZE: usize = 1;
+const MAX_SPEED: f64 = 8.0;
 
 type Action = MixedItem<ACTION_SIZE>;
 type ActionSpace = Mixed<ACTION_SIZE>;
@@ -33,15 +34,15 @@ pub struct Pendulum {
 
 impl Pendulum {
     pub fn new(config: PendulumConfig) -> Result<Self, Error> {
-        let hs = SVector::from_vec(vec![1.0, 1.0, 8.0]);
+        let hs = SVector::from_vec(vec![1.0, 1.0, MAX_SPEED]);
         let ha = SVector::from_element(1.0);
 
         Ok(Self {
             space: EnvSpace {
                 state: Boxed::new(-hs, hs)?,
                 action: match config.continuous {
-                    true => Mixed::discrete(config.n)?,
-                    false => Mixed::continuous(-ha, ha)?,
+                    true => Mixed::continuous(-ha, ha)?,
+                    false => Mixed::discrete(config.n)?,
                 },
             },
             config,
@@ -57,8 +58,16 @@ impl Pendulum {
             Some(s) => StdRng::seed_from_u64(s),
             None => StdRng::from_os_rng(),
         };
-        let theta = rng.random_range(-self.config.x0..self.config.x0);
-        let omega = rng.random_range(-self.config.y0..self.config.y0);
+        let theta = if self.config.x0 > 0.0 {
+            rng.random_range(-self.config.x0..self.config.x0)
+        } else {
+            0.0
+        };
+        let omega = if self.config.y0 > 0.0 {
+            rng.random_range(-self.config.y0..self.config.y0)
+        } else {
+            0.0
+        };
 
         (theta, omega)
     }
@@ -107,9 +116,10 @@ impl Environment for Pendulum {
         let cost =
             normalize_angle(self.theta).powi(2) + 0.1 * self.omega.powi(2) + 1e-3 * u.powi(2);
 
+        // FIX: Clamp omega to MAX_SPEED (8.0), not max_tau (2.0)
         self.omega = (self.omega
             + dt * (3. * g * self.theta.sin() / (2. * l) + 3. * u / (m * l.powi(2))))
-        .clamp(-self.config.max_tau, self.config.max_tau);
+        .clamp(-MAX_SPEED, MAX_SPEED);
 
         self.theta += self.omega * dt;
 
@@ -167,7 +177,8 @@ mod tests {
 
         assert_eq!(pendulum.t, 0);
         assert!(pendulum.state.is_none());
-        assert!(pendulum.space.action.is_discrete());
+        // FIX: Default pendulum is Continuous
+        assert!(pendulum.space.action.is_continuous());
     }
 
     #[test]
@@ -194,10 +205,9 @@ mod tests {
 
     #[test]
     fn test_step_uninitialized() {
-        let config = PendulumConfig::default();
+        let config = PendulumConfig::default().with_discrete_action(3);
         let mut pendulum = Pendulum::new(config).unwrap();
 
-        // Action irrelevant here
         let action = MixedItem::Discrete(0);
         let result = pendulum.step(action);
 
@@ -206,8 +216,8 @@ mod tests {
 
     #[test]
     fn test_step_discrete_logic() {
-        // Default config -> continuous=true -> Mixed::discrete logic in 'new'
-        let config = PendulumConfig::default();
+        // FIX: Must explicitly configure discrete action for this test
+        let config = PendulumConfig::default().with_discrete_action(3);
         let mut pendulum = Pendulum::new(config).unwrap();
 
         pendulum.reset(Some(0)).unwrap();
@@ -218,16 +228,15 @@ mod tests {
 
         assert_eq!(exp.step, 1);
         assert!(!exp.terminal.is_terminated());
-        assert!(!exp.terminal.is_truncated()); // max_t default is 200
+        assert!(!exp.terminal.is_truncated());
 
-        // Check state transition occurred
         assert_ne!(exp.next_state, exp.curr_state);
     }
 
     #[test]
     fn test_step_continuous_logic() {
-        // with_discrete_action -> continuous=false -> Mixed::continuous logic in 'new'
-        let config = PendulumConfig::default().with_discrete_action(2);
+        // FIX: Default config is continuous, so we can test continuous logic directly
+        let config = PendulumConfig::default();
         let mut pendulum = Pendulum::new(config).unwrap();
 
         pendulum.reset(Some(0)).unwrap();
@@ -242,22 +251,24 @@ mod tests {
 
     #[test]
     fn test_truncation() {
+        // FIX: Use default continuous action for truncation test
         let config = PendulumConfig::default().with_max_steps(2);
         let mut pendulum = Pendulum::new(config).unwrap();
 
         pendulum.reset(Some(0)).unwrap();
+        let action = MixedItem::Continuous(SVector::from_element(0.0));
 
         // Step 1
-        let exp1 = pendulum.step(MixedItem::Discrete(0)).unwrap();
+        let exp1 = pendulum.step(action).unwrap();
         assert!(!exp1.terminal.is_truncated());
         assert!(!pendulum.is_truncated());
         // Step 2 (Max steps reached)
-        let exp2 = pendulum.step(MixedItem::Discrete(0)).unwrap();
+        let exp2 = pendulum.step(action).unwrap();
         assert!(exp2.terminal.is_truncated());
         assert!(pendulum.is_truncated());
 
         // Step 3 (Should fail)
-        let res = pendulum.step(MixedItem::Discrete(0));
+        let res = pendulum.step(action);
         assert!(matches!(res, Err(Error::EpisodeDone)));
     }
 
@@ -276,37 +287,31 @@ mod tests {
 
     #[test]
     fn test_cost_calculation() {
+        // FIX: Default is continuous, use continuous action
         let config = PendulumConfig::default()
-            .with_initial_angle(0.0) // Start upright (unstable equilibrium approx)
+            .with_initial_angle(0.0)
             .with_initial_velocity(0.0);
 
         let mut pendulum = Pendulum::new(config).unwrap();
 
-        // Force specific state to verify cost: theta=0, omega=0
-        // Reset randomizes, so we might need to trust physics or mock RNG.
-        // Instead, we run one step and check sign of reward.
-        // Cost = theta^2 + 0.1*omega^2 + 0.001*u^2
-        // Reward = -Cost
-        // Reward should be negative or zero.
-
         pendulum.reset(None).unwrap();
-        let exp = pendulum.step(MixedItem::Discrete(0)).unwrap();
+        let action = MixedItem::Continuous(SVector::from_element(0.0));
+        let exp = pendulum.step(action).unwrap();
 
         assert!(exp.reward <= 0.0);
     }
 
     #[test]
     fn test_invalid_action_space() {
-        // Config is "continuous" (which means Discrete space in provided code logic)
+        // Default config is Continuous
         let config = PendulumConfig::default();
         let mut pendulum = Pendulum::new(config).unwrap();
         pendulum.reset(None).unwrap();
 
-        // Pass Continuous action to Discrete space
-        let invalid_action = MixedItem::Continuous(SVector::from_element(0.0));
+        // FIX: Pass Discrete action to Continuous space to trigger error
+        let invalid_action = MixedItem::Discrete(0);
         let res = pendulum.step(invalid_action);
 
-        // The Space::contains check in step() should fail
         assert!(res.is_err());
     }
 }

@@ -117,7 +117,7 @@ impl Environment for MountainCar {
         let state = self.state()?;
         let x = state[0];
         let v = state[1];
-        Ok(self.t > self.config.max_t || (x >= self.config.goal_x && v >= self.config.goal_v))
+        Ok(self.t >= self.config.max_t || (x >= self.config.goal_x && v >= self.config.goal_v))
     }
 
     fn state(&self) -> Result<Self::State, Error> {

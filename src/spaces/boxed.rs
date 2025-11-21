@@ -44,7 +44,13 @@ impl<const D: usize> Space for Boxed<D> {
             .low
             .iter()
             .zip(self.high.iter())
-            .map(|(&l, &h)| Ok(Uniform::new_inclusive(l, h)?.sample(&mut rng)))
+            .map(|(&l, &h)| {
+                if l == h {
+                    Ok(l)
+                } else {
+                    Ok(Uniform::new(l, h)?.sample(&mut rng))
+                }
+            })
             .collect();
 
         Ok(SVector::from_vec(sampled?))

@@ -107,7 +107,6 @@ impl Default for PhysicsWorld {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rapier2d::prelude::*;
 
     #[test]
     fn test_new_physics_world_initialization() {
@@ -155,7 +154,16 @@ mod tests {
             .build();
         let handle = world.rigid_body_set.insert(rigid_body);
 
-        world.step();
+        // Add a collider to give the body mass
+        let collider = ColliderBuilder::ball(0.5).build();
+        world
+            .collider_set
+            .insert_with_parent(collider, handle, &mut world.rigid_body_set);
+
+        // Run a few steps to ensure gravity has visibly affected the body
+        for _ in 0..10 {
+            world.step();
+        }
 
         let body = world.rigid_body_set.get(handle).unwrap();
         assert!(body.translation().y < 10.0);
@@ -171,12 +179,19 @@ mod tests {
             .build();
         let handle = world.rigid_body_set.insert(rigid_body);
 
+        // Add a collider to give the body mass
+        let collider = ColliderBuilder::ball(0.5).build();
+        world
+            .collider_set
+            .insert_with_parent(collider, handle, &mut world.rigid_body_set);
+
         let dt = 0.1;
         world.step_with_dt(dt);
 
         let body = world.rigid_body_set.get(handle).unwrap();
 
         let expected_pos_approx = 10.0 + (-9.81 * dt * dt);
+
         assert!(body.translation().y < 10.0);
         assert!((body.translation().y - expected_pos_approx).abs() < 1.0);
     }
@@ -200,10 +215,8 @@ mod tests {
         let joint = FixedJointBuilder::new().build();
         world.impulse_joint_set.insert(handle, handle2, joint, true);
 
-        // Note: Inserting a joint usually requires two bodies, but we just need to check if sets are cleared.
-        // We will just check RB and Collider sets primarily as reset clears all container struvcts.
-
-        assert_eq!(world.rigid_body_set.len(), 1);
+        // Note: We inserted 2 rigid bodies (handle and handle2).
+        assert_eq!(world.rigid_body_set.len(), 2);
         assert_eq!(world.collider_set.len(), 1);
 
         world.reset();
@@ -243,17 +256,19 @@ mod tests {
             .collider_set
             .insert_with_parent(co2, h2, &mut world.rigid_body_set);
 
-        for _ in 0..10 {
+        // FIX: Increased loop count from 10 to 20.
+        // Impact happens at t=0.2s (approx step 12). 10 steps was insufficient.
+        for _ in 0..20 {
             world.step();
         }
 
         let event = world.collision_recv.try_recv();
-        assert!(event.is_ok());
+        assert!(event.is_ok(), "Collision event queue was empty");
 
         if let Ok(CollisionEvent::Started(_, _, _)) = event {
             // Expected behavior
         } else {
-            panic!("Expected a Started collision event");
+            panic!("Expected a Started collision event, got {:?}", event);
         }
     }
 }

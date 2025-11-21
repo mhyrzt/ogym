@@ -234,7 +234,7 @@ impl TerrainGenerator {
 mod tests {
     use super::*;
     use rand::rngs::mock::StepRng;
-    use rapier2d::prelude::*;
+    
 
     #[test]
     fn test_terrain_generator_creation() {
