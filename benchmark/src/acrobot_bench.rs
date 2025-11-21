@@ -1,0 +1,21 @@
+use ogym::env::control::acrobot::{Acrobot, AcrobotConfig};
+use ogym::env::environment::Environment;
+use ogym::spaces::MixedItem;
+use std::time::Instant;
+
+pub fn main() {
+    let config = AcrobotConfig::default();
+    let mut env = Acrobot::new(config).unwrap();
+    env.reset(Some(42)).unwrap();
+
+    let start = Instant::now();
+    for _ in 0..10000 {
+        let action = MixedItem::Discrete(1);
+        let _ = env.step(action);
+        if env.is_done().unwrap() {
+            env.reset(None).unwrap();
+        }
+    }
+    let duration = start.elapsed();
+    println!("Acrobot (ogym): {:?}", duration);
+}

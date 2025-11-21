@@ -1,0 +1,138 @@
+# Justfile for benchmarking ogym vs gymnasium with hyperfine
+
+# Build the Rust benchmarks
+build:
+    cd .. && cargo build --release
+    cd .. && cargo build -p benchmark --release
+
+# Run all hyperfine benchmarks for ogym
+hyperfine-ogym-all:
+    hyperfine --export-json results/ogym_results.json \
+        --command-name "ogym-acrobot" 'cargo run --release -- acrobot' \
+        --command-name "ogym-cartpole" 'cargo run --release -- cartpole' \
+        --command-name "ogym-mountain-car" 'cargo run --release -- mountain_car' \
+        --command-name "ogym-pendulum" 'cargo run --release -- pendulum'
+
+# Run all hyperfine benchmarks for gymnasium
+hyperfine-gym-all:
+    hyperfine --export-json results/gym_results.json \
+        --command-name "gym-acrobot" 'python gym_benchmarks/acrobot_gym.py' \
+        --command-name "gym-cartpole" 'python gym_benchmarks/cartpole_gym.py' \
+        --command-name "gym-mountain-car" 'python gym_benchmarks/mountain_car_gym.py' \
+        --command-name "gym-pendulum" 'python gym_benchmarks/pendulum_gym.py'
+
+# Run all benchmarks comparing both libraries
+hyperfine-compare-all:
+    mkdir -p results
+    echo "=== Running ogym benchmarks ==="
+    hyperfine --export-json results/ogym_results.json \
+        --command-name "ogym-acrobot" 'cargo run --release -- acrobot' \
+        --command-name "ogym-cartpole" 'cargo run --release -- cartpole' \
+        --command-name "ogym-mountain-car" 'cargo run --release -- mountain_car' \
+        --command-name "ogym-pendulum" 'cargo run --release -- pendulum'
+    echo "=== Running gymnasium benchmarks ==="
+    hyperfine --export-json results/gym_results.json \
+        --command-name "gym-acrobot" 'python gym_benchmarks/acrobot_gym.py' \
+        --command-name "gym-cartpole" 'python gym_benchmarks/cartpole_gym.py' \
+        --command-name "gym-mountain-car" 'python gym_benchmarks/mountain_car_gym.py' \
+        --command-name "gym-pendulum" 'python gym_benchmarks/pendulum_gym.py'
+    echo "Results saved to results/ogym_results.json and results/gym_results.json"
+
+# Run comparison for specific environment
+hyperfine-compare-acrobot:
+    mkdir -p results
+    hyperfine --export-json results/acrobot_comparison.json \
+        --command-name "ogym-acrobot" 'cargo run --release -- acrobot' \
+        --command-name "gym-acrobot" 'python gym_benchmarks/acrobot_gym.py'
+    echo "Results saved to results/acrobot_comparison.json"
+
+hyperfine-compare-cartpole:
+    mkdir -p results
+    hyperfine --export-json results/cartpole_comparison.json \
+        --command-name "ogym-cartpole" 'cargo run --release -- cartpole' \
+        --command-name "gym-cartpole" 'python gym_benchmarks/cartpole_gym.py'
+    echo "Results saved to results/cartpole_comparison.json"
+
+hyperfine-compare-mountain-car:
+    mkdir -p results
+    hyperfine --export-json results/mountain_car_comparison.json \
+        --command-name "ogym-mountain-car" 'cargo run --release -- mountain_car' \
+        --command-name "gym-mountain-car" 'python gym_benchmarks/mountain_car_gym.py'
+    echo "Results saved to results/mountain_car_comparison.json"
+
+hyperfine-compare-pendulum:
+    mkdir -p results
+    hyperfine --export-json results/pendulum_comparison.json \
+        --command-name "ogym-pendulum" 'cargo run --release -- pendulum' \
+        --command-name "gym-pendulum" 'python gym_benchmarks/pendulum_gym.py'
+    echo "Results saved to results/pendulum_comparison.json"
+
+# Run simple timing (for compatibility)
+bench-ogym-all:
+    cargo run --release -- all
+
+bench-ogym-acrobot:
+    cargo run --release -- acrobot
+
+bench-ogym-cartpole:
+    cargo run --release -- cartpole
+
+bench-ogym-mountain-car:
+    cargo run --release -- mountain_car
+
+bench-ogym-pendulum:
+    cargo run --release -- pendulum
+
+# Run simple gym benchmarks (for compatibility)
+bench-gym-all:
+    python utils/gym_benchmarks.py all
+
+bench-gym-acrobot:
+    python utils/gym_benchmarks.py acrobot
+
+bench-gym-cartpole:
+    python utils/gym_benchmarks.py cartpole
+
+bench-gym-mountain-car:
+    python utils/gym_benchmarks.py mountain_car
+
+bench-gym-pendulum:
+    python utils/gym_benchmarks.py pendulum
+
+# Run benchmarks through main script (for compatibility)
+bench-main-all:
+    python utils/main.py all
+
+bench-main-acrobot:
+    python utils/main.py acrobot
+
+bench-main-cartpole:
+    python utils/main.py cartpole
+
+bench-main-mountain-car:
+    python utils/main.py mountain_car
+
+bench-main-pendulum:
+    python utils/main.py pendulum
+
+# Install Python dependencies
+install-python-deps:
+    pip install gymnasium numpy matplotlib seaborn pandas
+
+# Visualize results
+plot-results:
+    python analysis/visualize_results.py
+
+# Clean build artifacts
+clean:
+    cd .. && cargo clean
+    rm -rf target
+    rm -rf results
+
+# Clean and run full comparison with visualization
+full-comparison:
+    just clean
+    just build
+    just hyperfine-compare-all
+    just install-python-deps
+    just plot-results
