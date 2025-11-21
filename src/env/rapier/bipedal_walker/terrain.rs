@@ -25,7 +25,7 @@ impl TerrainGenerator {
         rigid_body_set: &mut RigidBodySet,
         collider_set: &mut ColliderSet,
         hardcore: bool,
-    ) -> (Vec<RigidBodyHandle>, Vec<f64>, Vec<f64>) {
+    ) -> (Vec<RigidBodyHandle>, Vec<f32>, Vec<f32>) {
         let mut terrain_handles = Vec::new();
         let mut terrain_x = Vec::new();
         let mut terrain_y = Vec::new();
@@ -42,7 +42,7 @@ impl TerrainGenerator {
         let mut original_y = 0.0;
 
         for i in 0..self.config.terrain_length {
-            let x = i as f64 * self.config.terrain_step;
+            let x = i as f32 * self.config.terrain_step;
             terrain_x.push(x);
 
             match state {
@@ -60,10 +60,10 @@ impl TerrainGenerator {
 
                     // Create left wall
                     let poly = vec![
-                        Vector2::new(x as f32, y as f32),
-                        Vector2::new((x + step) as f32, y as f32),
-                        Vector2::new((x + step) as f32, (y - 4.0 * step) as f32),
-                        Vector2::new(x as f32, (y - 4.0 * step) as f32),
+                        Vector2::new(x, y),
+                        Vector2::new(x + step, y),
+                        Vector2::new(x + step, y - 4.0 * step),
+                        Vector2::new(x, y - 4.0 * step),
                     ];
                     self.create_polygon_terrain(
                         rigid_body_set,
@@ -73,12 +73,12 @@ impl TerrainGenerator {
                     );
 
                     // Create right wall
-                    let offset = step * counter as f64;
+                    let offset = step * counter as f32;
                     let poly = vec![
-                        Vector2::new((x + offset) as f32, y as f32),
-                        Vector2::new((x + offset + step) as f32, y as f32),
-                        Vector2::new((x + offset + step) as f32, (y - 4.0 * step) as f32),
-                        Vector2::new((x + offset) as f32, (y - 4.0 * step) as f32),
+                        Vector2::new(x + offset, y),
+                        Vector2::new(x + offset + step, y),
+                        Vector2::new(x + offset + step, y - 4.0 * step),
+                        Vector2::new(x + offset, y - 4.0 * step),
                     ];
                     self.create_polygon_terrain(
                         rigid_body_set,
@@ -102,13 +102,13 @@ impl TerrainGenerator {
                     counter = rng.random_range(1i32..3i32);
                     let step = self.config.terrain_step;
                     let poly = vec![
-                        Vector2::new(x as f32, y as f32),
-                        Vector2::new((x + counter as f64 * step) as f32, y as f32),
+                        Vector2::new(x, y),
+                        Vector2::new(x + counter as f32 * step, y),
                         Vector2::new(
-                            (x + counter as f64 * step) as f32,
-                            (y + counter as f64 * step) as f32,
+                            x + counter as f32 * step,
+                            y + counter as f32 * step,
                         ),
-                        Vector2::new(x as f32, (y + counter as f64 * step) as f32),
+                        Vector2::new(x, y + counter as f32 * step),
                     ];
                     self.create_polygon_terrain(
                         rigid_body_set,
@@ -128,20 +128,20 @@ impl TerrainGenerator {
                     for s in 0..stair_steps {
                         let poly = vec![
                             Vector2::new(
-                                (x + (s * stair_width) as f64 * step) as f32,
-                                (y + (s * stair_height) as f64 * step) as f32,
+                                x + (s * stair_width) as f32 * step,
+                                y + (s * stair_height) as f32 * step,
                             ),
                             Vector2::new(
-                                (x + ((1 + s) * stair_width) as f64 * step) as f32,
-                                (y + (s * stair_height) as f64 * step) as f32,
+                                x + ((1 + s) * stair_width) as f32 * step,
+                                y + (s * stair_height) as f32 * step,
                             ),
                             Vector2::new(
-                                (x + ((1 + s) * stair_width) as f64 * step) as f32,
-                                (y + (-1 + s * stair_height) as f64 * step) as f32,
+                                x + ((1 + s) * stair_width) as f32 * step,
+                                y + (-1 + s * stair_height) as f32 * step,
                             ),
                             Vector2::new(
-                                (x + (s * stair_width) as f64 * step) as f32,
-                                (y + (-1 + s * stair_height) as f64 * step) as f32,
+                                x + (s * stair_width) as f32 * step,
+                                y + (-1 + s * stair_height) as f32 * step,
                             ),
                         ];
                         self.create_polygon_terrain(
@@ -156,8 +156,8 @@ impl TerrainGenerator {
 
                 TerrainState::Stairs if !oneshot => {
                     let s = (stair_steps * stair_width) as i32 - counter as i32 - stair_height;
-                    let n = s as f64 / stair_width as f64;
-                    y = original_y + n * stair_height as f64 * self.config.terrain_step;
+                    let n = s as f32 / stair_width as f32;
+                    y = original_y + n * stair_height as f32 * self.config.terrain_step;
                 }
 
                 _ => {}

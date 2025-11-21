@@ -143,7 +143,7 @@ mod tests {
         assert_eq!(config.max_vel_2, 9.0 * PI);
         assert_eq!(config.torque_noise_max, 0.0);
         assert_eq!(config.dynamics_mode, DynamicsMode::Book);
-        assert_eq!(config.continuous, false);
+        assert!(!config.continuous);
         assert_eq!(config.max_t, 500);
     }
 

@@ -23,18 +23,18 @@ pub struct BipedalWalker {
 
     legs: Vec<LegData>,
 
-    state: SVector<f64, STATE_SIZE>,
+    state: SVector<f32, STATE_SIZE>,
     steps: u32,
-    prev_shaping: Option<f64>,
+    prev_shaping: Option<f32>,
     game_over: bool,
-    scroll: f64,
+    scroll: f32,
 
-    terrain_x: Vec<f64>,
-    terrain_y: Vec<f64>,
+    terrain_x: Vec<f32>,
+    terrain_y: Vec<f32>,
 
     rng: rand::rngs::StdRng,
 
-    lidar_fractions: Vec<f64>,
+    lidar_fractions: Vec<f32>,
 }
 
 impl BipedalWalker {
@@ -128,8 +128,8 @@ impl BipedalWalker {
             .build();
         let rb = RigidBodyBuilder::dynamic()
             .translation(vector![
-                (self.config.terrain_step * self.config.terrain_startpad as f64 / 2.0) as f32,
-                (self.config.terrain_height + 2.0 * self.config.leg_h) as f32
+                self.config.terrain_step * self.config.terrain_startpad as f32 / 2.0,
+                self.config.terrain_height + 2.0 * self.config.leg_h
             ])
             .build();
         let handle = self.world.rigid_body_set.insert(rb);
@@ -152,30 +152,30 @@ impl BipedalWalker {
         self.create_hull();
     }
 
-    fn compute_state(&self) -> SVector<f64, STATE_SIZE> {
+    fn compute_state(&self) -> SVector<f32, STATE_SIZE> {
         // Construct the flat feature vector like the Gym version.
         let hull = self.world.rigid_body_set[self.hull_handle].clone();
         let linear_velocity = hull.linvel();
         let angular_velocity = hull.angvel();
         let angle = hull.rotation().angle();
         let mut state_vec = vec![
-            angle as f64,
-            2.0 * angular_velocity as f64 / self.config.fps as f64,
-            0.3 * linear_velocity.x as f64 * (self.config.viewport_w / self.config.scale)
-                / self.config.fps as f64,
-            0.3 * linear_velocity.y as f64 * (self.config.viewport_h / self.config.scale)
-                / self.config.fps as f64,
+            angle,
+            2.0 * angular_velocity / self.config.fps as f32,
+            0.3 * linear_velocity.x * (self.config.viewport_w / self.config.scale)
+                / self.config.fps as f32,
+            0.3 * linear_velocity.y * (self.config.viewport_h / self.config.scale)
+                / self.config.fps as f32,
         ];
         // Append simplified joint and lidar features placeholders
         state_vec.extend(self.lidar_fractions.clone());
-        let mut out = SVector::<f64, STATE_SIZE>::zeros();
+        let mut out = SVector::<f32, STATE_SIZE>::zeros();
         for (i, val) in state_vec.iter().take(STATE_SIZE).enumerate() {
             out[i] = *val;
         }
         out
     }
 
-    fn compute_reward(&mut self, pos_x: f64, angle: f64, action: &[f64]) -> f64 {
+    fn compute_reward(&mut self, pos_x: f32, angle: f32, action: &[f32]) -> f32 {
         let mut reward = 0.0;
         let mut shaping = 130.0 * pos_x / self.config.scale;
         shaping -= 5.0 * angle.abs();
@@ -194,8 +194,8 @@ impl BipedalWalker {
 }
 
 impl Environment for BipedalWalker {
-    type Action = SVector<f64, 4>;
-    type State = SVector<f64, STATE_SIZE>;
+    type Action = SVector<f32, 4>;
+    type State = SVector<f32, STATE_SIZE>;
     type Info = ();
 
     fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
@@ -220,11 +220,9 @@ impl Environment for BipedalWalker {
                 } else {
                     self.config.speed_hip * a.signum()
                 };
-                joint.data.set_motor_velocity(
-                    JointAxis::AngX,
-                    speed as f32,
-                    self.config.motors_torque as f32,
-                );
+                joint
+                    .data
+                    .set_motor_velocity(JointAxis::AngX, speed, self.config.motors_torque);
             }
         }
 
@@ -234,8 +232,8 @@ impl Environment for BipedalWalker {
         // Compute basic reward and termination
         let hull = &self.world.rigid_body_set[self.hull_handle];
         let pos = hull.translation();
-        let angle = hull.rotation().angle() as f64;
-        let reward = self.compute_reward(pos.x as f64, angle, action.as_slice());
+        let angle = hull.rotation().angle();
+        let reward = self.compute_reward(pos.x, angle, action.as_slice()) as f64;
         let next_state = self.compute_state();
         let terminal = self.to_terminal()?;
 

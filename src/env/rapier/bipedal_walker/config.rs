@@ -4,35 +4,35 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BipedalWalkerConfig {
     pub fps: u32,
-    pub scale: f64,
+    pub scale: f32,
 
     // Motor parameters
-    pub motors_torque: f64,
-    pub speed_hip: f64,
-    pub speed_knee: f64,
+    pub motors_torque: f32,
+    pub speed_hip: f32,
+    pub speed_knee: f32,
 
     // Lidar parameters
-    pub lidar_range: f64,
+    pub lidar_range: f32,
     pub lidar_count: usize,
 
     // Initial conditions
-    pub initial_random: f64,
+    pub initial_random: f32,
 
-    pub hull_vertices: Vec<(f64, f64)>,
+    pub hull_vertices: Vec<(f32, f32)>,
 
-    pub leg_down: f64,
-    pub leg_w: f64,
-    pub leg_h: f64,
+    pub leg_down: f32,
+    pub leg_w: f32,
+    pub leg_h: f32,
 
-    pub viewport_w: f64,
-    pub viewport_h: f64,
+    pub viewport_w: f32,
+    pub viewport_h: f32,
 
-    pub terrain_step: f64,
+    pub terrain_step: f32,
     pub terrain_length: usize,
-    pub terrain_height: f64,
+    pub terrain_height: f32,
     pub terrain_grass: usize,
     pub terrain_startpad: usize,
-    pub friction: f64,
+    pub friction: f32,
 
     pub max_episode_steps: u32,
     pub hardcore: bool,
@@ -107,7 +107,7 @@ impl BipedalWalkerConfig {
     pub fn get_scaled_hull_vertices(&self) -> Vec<Vector2<f32>> {
         self.hull_vertices
             .iter()
-            .map(|(x, y)| Vector2::new((x / self.scale) as f32, (y / self.scale) as f32))
+            .map(|(x, y)| Vector2::new(x / self.scale, y / self.scale))
             .collect()
     }
 }
