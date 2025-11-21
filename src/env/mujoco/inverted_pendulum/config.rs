@@ -19,7 +19,7 @@ impl Default for InvertedPendulumConfig {
             xml_file: "model.xml".to_string(),
             frame_skip: 2,
             reset_noise_scale: 0.01,
-            observation_shape: (4,), // 4 elements: [qpos, qvel]
+            observation_shape: (4,),
             observation_low: f64::NEG_INFINITY,
             observation_high: f64::INFINITY,
             default_camera_config,

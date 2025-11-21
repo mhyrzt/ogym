@@ -1,5 +1,5 @@
 use crate::env::environment::{Environment, Error, Experience};
-use crate::env::rapier::utils::PhysicsWorld as GeneralPhysicsWorld;
+use crate::env::rapier::world::PhysicsWorld as GeneralPhysicsWorld;
 use nalgebra::{Point2, SVector};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
