@@ -1,7 +1,6 @@
 use crate::env::rapier::world::PhysicsWorld as GeneralPhysicsWorld;
 use rapier2d::prelude::*;
 
-// Extend the general PhysicsWorld with bipedal walker specific functionality
 pub trait BipedalWalkerPhysicsExt {
     fn clear_collisions(&self);
 }

@@ -85,7 +85,6 @@ impl PhysicsWorld {
         );
     }
 
-    /// Reset the physics world (clear all bodies and colliders)
     pub fn reset(&mut self) {
         self.rigid_body_set = RigidBodySet::new();
         self.collider_set = ColliderSet::new();
@@ -102,5 +101,159 @@ impl PhysicsWorld {
 impl Default for PhysicsWorld {
     fn default() -> Self {
         Self::new(-9.81)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rapier2d::prelude::*;
+
+    #[test]
+    fn test_new_physics_world_initialization() {
+        let gravity_y = -20.0;
+        let world = PhysicsWorld::new(gravity_y);
+
+        assert_eq!(world.gravity.x, 0.0);
+        assert_eq!(world.gravity.y, gravity_y);
+        assert_eq!(world.rigid_body_set.len(), 0);
+        assert_eq!(world.collider_set.len(), 0);
+        assert_eq!(world.impulse_joint_set.len(), 0);
+        assert_eq!(world.multibody_joint_set.iter().count(), 0);
+    }
+
+    #[test]
+    fn test_default_physics_world() {
+        let world = PhysicsWorld::default();
+
+        assert_eq!(world.gravity.x, 0.0);
+        assert_eq!(world.gravity.y, -9.81);
+    }
+
+    #[test]
+    fn test_add_rigid_body_and_collider() {
+        let mut world = PhysicsWorld::default();
+
+        let rigid_body = RigidBodyBuilder::dynamic().build();
+        let handle = world.rigid_body_set.insert(rigid_body);
+
+        let collider = ColliderBuilder::ball(0.5).build();
+        world
+            .collider_set
+            .insert_with_parent(collider, handle, &mut world.rigid_body_set);
+
+        assert_eq!(world.rigid_body_set.len(), 1);
+        assert_eq!(world.collider_set.len(), 1);
+    }
+
+    #[test]
+    fn test_step_simulation() {
+        let mut world = PhysicsWorld::default();
+
+        let rigid_body = RigidBodyBuilder::dynamic()
+            .translation(vector![0.0, 10.0])
+            .build();
+        let handle = world.rigid_body_set.insert(rigid_body);
+
+        world.step();
+
+        let body = world.rigid_body_set.get(handle).unwrap();
+        assert!(body.translation().y < 10.0);
+    }
+
+    #[test]
+    fn test_step_with_dt_simulation() {
+        let mut world = PhysicsWorld::default();
+
+        let rigid_body = RigidBodyBuilder::dynamic()
+            .translation(vector![0.0, 10.0])
+            .linvel(vector![0.0, 0.0])
+            .build();
+        let handle = world.rigid_body_set.insert(rigid_body);
+
+        let dt = 0.1;
+        world.step_with_dt(dt);
+
+        let body = world.rigid_body_set.get(handle).unwrap();
+
+        let expected_pos_approx = 10.0 + (-9.81 * dt * dt);
+        assert!(body.translation().y < 10.0);
+        assert!((body.translation().y - expected_pos_approx).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_reset_world() {
+        let mut world = PhysicsWorld::default();
+
+        let rigid_body = RigidBodyBuilder::dynamic().build();
+        let handle = world.rigid_body_set.insert(rigid_body);
+
+        let collider = ColliderBuilder::ball(0.5).build();
+        world
+            .collider_set
+            .insert_with_parent(collider, handle, &mut world.rigid_body_set);
+
+        // Create a second rigid body for the joint (joints need two bodies)
+        let rigid_body2 = RigidBodyBuilder::dynamic().build();
+        let handle2 = world.rigid_body_set.insert(rigid_body2);
+
+        let joint = FixedJointBuilder::new().build();
+        world.impulse_joint_set.insert(handle, handle2, joint, true);
+
+        // Note: Inserting a joint usually requires two bodies, but we just need to check if sets are cleared.
+        // We will just check RB and Collider sets primarily as reset clears all container struvcts.
+
+        assert_eq!(world.rigid_body_set.len(), 1);
+        assert_eq!(world.collider_set.len(), 1);
+
+        world.reset();
+
+        assert_eq!(world.rigid_body_set.len(), 0);
+        assert_eq!(world.collider_set.len(), 0);
+        assert_eq!(world.impulse_joint_set.len(), 0);
+        assert_eq!(world.multibody_joint_set.iter().count(), 0);
+    }
+
+    #[test]
+    fn test_collision_event_handling() {
+        let mut world = PhysicsWorld::default();
+        world.gravity = vector![0.0, 0.0];
+
+        let rb1 = RigidBodyBuilder::dynamic()
+            .translation(vector![-1.0, 0.0])
+            .linvel(vector![2.0, 0.0])
+            .build();
+        let h1 = world.rigid_body_set.insert(rb1);
+        let co1 = ColliderBuilder::ball(0.6)
+            .active_events(ActiveEvents::COLLISION_EVENTS)
+            .build();
+        world
+            .collider_set
+            .insert_with_parent(co1, h1, &mut world.rigid_body_set);
+
+        let rb2 = RigidBodyBuilder::dynamic()
+            .translation(vector![1.0, 0.0])
+            .linvel(vector![-2.0, 0.0])
+            .build();
+        let h2 = world.rigid_body_set.insert(rb2);
+        let co2 = ColliderBuilder::ball(0.6)
+            .active_events(ActiveEvents::COLLISION_EVENTS)
+            .build();
+        world
+            .collider_set
+            .insert_with_parent(co2, h2, &mut world.rigid_body_set);
+
+        for _ in 0..10 {
+            world.step();
+        }
+
+        let event = world.collision_recv.try_recv();
+        assert!(event.is_ok());
+
+        if let Ok(CollisionEvent::Started(_, _, _)) = event {
+            // Expected behavior
+        } else {
+            panic!("Expected a Started collision event");
+        }
     }
 }
