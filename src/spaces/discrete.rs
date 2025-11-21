@@ -13,6 +13,10 @@ impl Discrete {
             false => Err(Error::DiscreteInvalidSize),
         }
     }
+
+    pub fn size(&self) -> u32 {
+        self.n
+    }
 }
 
 impl Space for Discrete {

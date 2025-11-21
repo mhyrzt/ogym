@@ -100,3 +100,87 @@ impl MountainCarConfig {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config() {
+        let config = MountainCarConfig::default();
+        assert_eq!(config.f, 1e-3);
+        assert_eq!(config.g, 25e-4);
+        assert_eq!(config.min_x, -1.2);
+        assert_eq!(config.max_x, 0.6);
+        assert_eq!(config.max_v, 7e-2);
+        assert_eq!(config.max_t, 200);
+        assert_eq!(config.goal_x, 0.5);
+        assert_eq!(config.goal_v, 0.0);
+        assert_eq!(config.continuous, false);
+        assert_eq!(config.reward, MountainCarReward::Constant);
+    }
+
+    #[test]
+    fn test_new_config() {
+        let config = MountainCarConfig::new();
+        let default_config = MountainCarConfig::default();
+        assert_eq!(config, default_config);
+    }
+
+    #[test]
+    fn test_builder_methods() {
+        let config = MountainCarConfig::new()
+            .with_force(0.002)
+            .with_gravity(0.003)
+            .with_max_steps(500)
+            .with_min_position(-2.0)
+            .with_max_position(1.0)
+            .with_max_velocity(0.1)
+            .with_goal_position(0.8)
+            .with_goal_velocity(0.05);
+
+        assert_eq!(config.f, 0.002);
+        assert_eq!(config.g, 0.003);
+        assert_eq!(config.max_t, 500);
+        assert_eq!(config.min_x, -2.0);
+        assert_eq!(config.max_x, 1.0);
+        assert_eq!(config.max_v, 0.1);
+        assert_eq!(config.goal_x, 0.8);
+        assert_eq!(config.goal_v, 0.05);
+    }
+
+    #[test]
+    fn test_continuous_action_toggle() {
+        let config = MountainCarConfig::new().with_continuous_action();
+        assert!(config.continuous);
+
+        let config = config.with_discrete_action();
+        assert!(!config.continuous);
+    }
+
+    #[test]
+    fn test_reward_toggle() {
+        let config = MountainCarConfig::new().with_action_penalty_reward();
+        assert_eq!(config.reward, MountainCarReward::ActionPenalty);
+
+        let config = config.with_constant_reward();
+        assert_eq!(config.reward, MountainCarReward::Constant);
+    }
+
+    #[test]
+    fn test_clone_and_debug() {
+        let config = MountainCarConfig::default();
+        let cloned_config = config.clone();
+        assert_eq!(config, cloned_config);
+
+        let debug_str = format!("{:?}", config);
+        assert!(!debug_str.is_empty());
+
+        let reward = MountainCarReward::Constant;
+        let cloned_reward = reward.clone();
+        assert_eq!(reward, cloned_reward);
+
+        let debug_reward = format!("{:?}", reward);
+        assert!(!debug_reward.is_empty());
+    }
+}

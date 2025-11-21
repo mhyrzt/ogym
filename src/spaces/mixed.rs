@@ -22,6 +22,14 @@ impl<const D: usize> Mixed<D> {
     pub fn continuous(low: SVector<f64, D>, high: SVector<f64, D>) -> Result<Self, Error> {
         Ok(Self::Continuous(Boxed::new(low, high)?))
     }
+
+    pub fn is_discrete(&self) -> bool {
+        matches!(self, Self::Discrete(_))
+    }
+
+    pub fn is_continuous(&self) -> bool {
+        matches!(self, Self::Continuous(_))
+    }
 }
 
 impl<const D: usize> Space for Mixed<D> {

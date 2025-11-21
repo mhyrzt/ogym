@@ -28,13 +28,13 @@ impl Environment for MujocoSwimmerEnv {
         // Add noise to positions
         let mut qpos = self.init_qpos.clone();
         for i in 0..qpos.len() {
-            qpos[i] += rng.gen_range(noise_low..noise_high);
+            qpos[i] += rng.random_range(noise_low..noise_high);
         }
 
         // Add noise to velocities
         let mut qvel = self.init_qvel.clone();
         for i in 0..qvel.len() {
-            qvel[i] += rng.gen_range(noise_low..noise_high);
+            qvel[i] += rng.random_range(noise_low..noise_high);
         }
 
         self.env.set_state(&qpos, &qvel)?;

@@ -31,3 +31,56 @@ impl Terminal {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_terminal_ongoing() {
+        let terminal = Terminal::Ongoing;
+        assert!(!terminal.is_terminated());
+        assert!(!terminal.is_truncated());
+        assert!(!terminal.is_done());
+    }
+
+    #[test]
+    fn test_terminal_terminate() {
+        let terminal = Terminal::Terminate;
+        assert!(terminal.is_terminated());
+        assert!(!terminal.is_truncated());
+        assert!(terminal.is_done());
+    }
+
+    #[test]
+    fn test_terminal_truncate() {
+        let terminal = Terminal::Truncate;
+        assert!(!terminal.is_terminated());
+        assert!(terminal.is_truncated());
+        assert!(terminal.is_done());
+    }
+
+    #[test]
+    fn test_terminal_both() {
+        let terminal = Terminal::Both;
+        assert!(terminal.is_terminated());
+        assert!(terminal.is_truncated());
+        assert!(terminal.is_done());
+    }
+
+    #[test]
+    fn test_from_flags() {
+        assert_eq!(Terminal::from_flags(false, false), Terminal::Ongoing);
+        assert_eq!(Terminal::from_flags(true, false), Terminal::Terminate);
+        assert_eq!(Terminal::from_flags(false, true), Terminal::Truncate);
+        assert_eq!(Terminal::from_flags(true, true), Terminal::Both);
+    }
+
+    #[test]
+    fn test_derive_traits() {
+        let t1 = Terminal::Ongoing;
+        let t2 = t1;
+        assert_eq!(t1, t2);
+        assert_eq!(format!("{:?}", t1), "Ongoing");
+    }
+}

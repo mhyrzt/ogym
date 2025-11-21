@@ -206,3 +206,214 @@ impl Environment for Acrobot {
         self.t >= self.config.max_t
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::env::environment::Environment;
+    use crate::spaces::{Mixed, MixedItem};
+    use nalgebra::SVector;
+    use std::f64::consts::PI;
+
+    #[test]
+    fn test_initialization_discrete() {
+        let config = AcrobotConfig::default().with_discrete_action();
+        let acrobot = Acrobot::new(config).unwrap();
+
+        if let Mixed::Discrete(d) = &acrobot.space.action {
+            assert_eq!(d.size(), 3);
+        } else {
+            panic!("Expected discrete action space");
+        }
+    }
+
+    #[test]
+    fn test_initialization_continuous() {
+        let config = AcrobotConfig::default().with_continuous_action();
+        let acrobot = Acrobot::new(config).unwrap();
+
+        if let Mixed::Continuous(c) = &acrobot.space.action {
+            assert_eq!(c.low[0], -1.0);
+            assert_eq!(c.high[0], 1.0);
+        } else {
+            panic!("Expected continuous action space");
+        }
+    }
+
+    #[test]
+    fn test_reset() {
+        let config = AcrobotConfig::default();
+        let mut acrobot = Acrobot::new(config).unwrap();
+
+        let (state, _) = acrobot.reset(Some(42)).unwrap();
+
+        // State size should be 6 (cos/sin of 2 angles + 2 angular vels)
+        assert_eq!(state.len(), 6);
+
+        // Initial state should be small random values around 0
+        // cos(small) ~ 1.0, sin(small) ~ 0.0
+        assert!((state[0] - 1.0).abs() < 0.1); // cos(theta1)
+        assert!(state[1].abs() < 0.2); // sin(theta1)
+        assert!((state[2] - 1.0).abs() < 0.1); // cos(theta2)
+        assert!(state[3].abs() < 0.2); // sin(theta2)
+        assert!(state[4].abs() < 0.2); // vel1
+        assert!(state[5].abs() < 0.2); // vel2
+
+        // Check internal raw state
+        let raw = acrobot.raw().unwrap();
+        assert!(raw[0].abs() <= 0.1);
+        assert!(raw[1].abs() <= 0.1);
+        assert!(raw[2].abs() <= 0.1);
+        assert!(raw[3].abs() <= 0.1);
+    }
+
+    #[test]
+    fn test_step_discrete_actions() {
+        let config = AcrobotConfig::default().with_discrete_action();
+        let mut acrobot = Acrobot::new(config).unwrap();
+        acrobot.reset(None).unwrap();
+
+        // Action 0: Torque -1
+        let action_0 = MixedItem::Discrete(0);
+        let exp_0 = acrobot.step(action_0).unwrap();
+        assert_eq!(exp_0.reward, -1.0);
+        assert!(!exp_0.terminal.is_done());
+
+        // Action 2: Torque +1
+        let action_2 = MixedItem::Discrete(2);
+        let _exp_2 = acrobot.step(action_2).unwrap();
+    }
+
+    #[test]
+    fn test_step_continuous_actions() {
+        let config = AcrobotConfig::default().with_continuous_action();
+        let mut acrobot = Acrobot::new(config).unwrap();
+        acrobot.reset(None).unwrap();
+
+        // Torque 0.5
+        let action = MixedItem::Continuous(SVector::from_element(0.5));
+        let exp = acrobot.step(action).unwrap();
+
+        assert_eq!(exp.reward, -1.0);
+    }
+
+    #[test]
+    fn test_step_invalid_action_mismatch() {
+        let config_disc = AcrobotConfig::default().with_discrete_action();
+        let mut env_disc = Acrobot::new(config_disc).unwrap();
+        env_disc.reset(None).unwrap();
+
+        // Sending continuous action to discrete env
+        let bad_action = MixedItem::Continuous(SVector::from_element(0.5));
+        let res = env_disc.step(bad_action);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_step_invalid_action_bounds() {
+        let config = AcrobotConfig::default().with_discrete_action();
+        let mut env = Acrobot::new(config).unwrap();
+        env.reset(None).unwrap();
+
+        // Action index 3 is out of bounds (0, 1, 2 allowed)
+        let bad_action = MixedItem::Discrete(3);
+        let res = env.step(bad_action);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_terminal_condition() {
+        let config = AcrobotConfig::default();
+        let mut acrobot = Acrobot::new(config).unwrap();
+        acrobot.reset(None).unwrap();
+
+        // Manually set raw state to a terminal configuration
+        // Condition: -cos(s[0]) - cos(s[1] + s[0]) > 1.0 (based on standard gym, but here implementation is:)
+        // s[0].cos() + (s[0] + s[1]).cos() < -1.0
+        // Let s[0] = PI (cos = -1), s[1] = 0 (cos(pi+0) = -1). Sum = -2.
+        acrobot.raw_state = Some(SVector::from_vec(vec![PI, 0.0, 0.0, 0.0]));
+
+        assert!(acrobot.is_terminal().unwrap());
+
+        // Take a step in terminal state
+        let action = MixedItem::Discrete(1);
+        let exp = acrobot.step(action).unwrap();
+
+        assert_eq!(exp.reward, 0.0);
+        assert!(exp.terminal.is_terminated());
+        assert!(exp.terminal.is_done());
+    }
+
+    #[test]
+    fn test_truncation() {
+        let max_t = 5;
+        let config = AcrobotConfig::default().with_max_steps(max_t);
+        let mut acrobot = Acrobot::new(config).unwrap();
+        acrobot.reset(None).unwrap();
+
+        for i in 0..max_t {
+            assert!(!acrobot.is_truncated());
+            let _ = acrobot.step(MixedItem::Discrete(1)).unwrap();
+            assert_eq!(acrobot.t, i + 1);
+        }
+
+        assert!(acrobot.is_truncated());
+
+        // Next step should fail due to done
+        let res = acrobot.step(MixedItem::Discrete(1));
+        assert!(matches!(res, Err(Error::EpisodeDone)));
+    }
+
+    #[test]
+    fn test_constraint_wrapping() {
+        let config = AcrobotConfig::default();
+        let mut acrobot = Acrobot::new(config).unwrap();
+        acrobot.reset(None).unwrap();
+
+        // Set angle > PI, should wrap
+        let large_angle = PI + 0.5;
+        acrobot.raw_state = Some(SVector::from_vec(vec![large_angle, large_angle, 0.0, 0.0]));
+
+        // Trigger constraint logic by stepping (which calls rk4 -> constraint)
+        let _ = acrobot.step(MixedItem::Discrete(1)).unwrap();
+
+        let raw_after = acrobot.raw().unwrap();
+        // Just checking that it moved away from the raw large value into the canonical range [-PI, PI]
+        // Note: Logic is (x + PI) % TAU - PI.
+        // (PI + 0.5 + PI) % 2PI - PI = (2PI + 0.5) % 2PI - PI = 0.5 - PI = -2.64 approx
+        assert!(raw_after[0] >= -PI && raw_after[0] <= PI);
+        assert!(raw_after[1] >= -PI && raw_after[1] <= PI);
+    }
+
+    #[test]
+    fn test_constraint_velocity_clamping() {
+        let config = AcrobotConfig::default().with_max_velocities(1.0, 1.0); // Low limits
+        let mut acrobot = Acrobot::new(config).unwrap();
+        acrobot.reset(None).unwrap();
+
+        // Set velocity very high
+        acrobot.raw_state = Some(SVector::from_vec(vec![0.0, 0.0, 10.0, 10.0]));
+
+        // Step to trigger constraint
+        let _ = acrobot.step(MixedItem::Discrete(1)).unwrap();
+
+        let raw_after = acrobot.raw().unwrap();
+        // Should be clamped close to max_vel (1.0) plus small integration change
+        assert!(raw_after[2] <= 1.5); // allowing some buffer for physics update
+        assert!(raw_after[3] <= 1.5);
+    }
+
+    #[test]
+    fn test_torque_noise() {
+        let config = AcrobotConfig::default().with_torque_noise(5.0); // High noise
+        let mut acrobot = Acrobot::new(config).unwrap();
+        acrobot.reset(Some(123)).unwrap();
+
+        // We can't easily inspect the noise added inside `tau`,
+        // but we can ensure the step doesn't panic and produces valid state.
+        let _ = acrobot.step(MixedItem::Discrete(1)).unwrap();
+
+        let state = acrobot.state().unwrap();
+        assert!(state.iter().all(|x| x.is_finite()));
+    }
+}
