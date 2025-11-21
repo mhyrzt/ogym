@@ -1,12 +1,12 @@
 use nalgebra::SVector;
-use ogym::env::control::pendulum::PendulumConfig;
+use ogym::env::control::pendulum::{Pendulum, PendulumConfig};
 use ogym::env::environment::Environment;
-use ogym::spaces::{MixedItem, Space};
+use ogym::spaces::MixedItem;
 use std::time::Instant;
 
 pub fn main() {
     let config = PendulumConfig::default();
-    let mut env = Pende::new(config).unwrap();
+    let mut env = Pendulum::new(config).unwrap();
     env.reset(Some(42)).unwrap();
 
     let start = Instant::now();
