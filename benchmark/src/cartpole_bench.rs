@@ -1,6 +1,6 @@
 use ogym::env::control::cart_pole::{CartPole, CartPoleConfig};
 use ogym::env::environment::Environment;
-use ogym::spaces::{MixedItem, Space};
+use ogym::spaces::MixedItem;
 use std::time::Instant;
 
 pub fn main() {

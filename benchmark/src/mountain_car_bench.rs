@@ -1,6 +1,6 @@
 use ogym::env::control::mountain_car::{MountainCar, MountainCarConfig};
 use ogym::env::environment::Environment;
-use ogym::spaces::{MixedItem, Space};
+use ogym::spaces::MixedItem;
 use std::time::Instant;
 
 pub fn main() {
