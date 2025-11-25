@@ -15,18 +15,23 @@ pub struct MjEnv {
 impl MjEnv {
     pub fn new(path: &str, frame_skip: u32) -> Result<Self, Error> {
         let model = Model::from_xml(path).map_err(Error::MjInitError)?;
-        let state = State::new(&model);
         let simulation = Simulation::new(model);
+        let state = State::new(&simulation.model);
+
+        unsafe {
+            no_render::mj_resetData(simulation.model.ptr(), state.ptr());
+            no_render::mj_forward(simulation.model.ptr(), state.ptr());
+        }
 
         let init_qpos = {
             let ptr = state.ptr();
-            let nq = unsafe { (*simulation.model.ptr()).nq as usize };
+            let nq = simulation.model.nq();
             unsafe { std::slice::from_raw_parts((*ptr).qpos, nq).to_vec() }
         };
 
         let init_qvel = {
             let ptr = state.ptr();
-            let nv = unsafe { (*simulation.model.ptr()).nv as usize };
+            let nv = simulation.model.nv();
             unsafe { std::slice::from_raw_parts((*ptr).qvel, nv).to_vec() }
         };
 
@@ -89,8 +94,6 @@ impl MjEnv {
         let nu = self.model().nu();
         unsafe { std::slice::from_raw_parts((*ptr).actuator_ctrlrange as *const [f64; 2], nu) }
     }
-
-    // === Dimensions ===
 
     pub fn na(&self) -> usize {
         self.model().na()
@@ -212,9 +215,17 @@ impl MjEnv {
 
     pub fn body(&self, name: &str) -> Option<[f64; 3]> {
         let id = self.model().name_to_id(ObjType::BODY, name)?;
+
+        if (id as usize) >= self.nbody() {
+            return None;
+        }
+
         let ptr = self.state.ptr();
-        let pos_ptr = unsafe { (*ptr).xipos.add(id as usize) };
-        Some(unsafe { [*pos_ptr, *pos_ptr.add(1), *pos_ptr.add(2)] })
+
+        unsafe {
+            let pos_ptr = (*ptr).xpos.add((id as usize) * 3);
+            Some([*pos_ptr, *pos_ptr.add(1), *pos_ptr.add(2)])
+        }
     }
 
     pub fn qpos_mut(&mut self) -> &mut [f64] {
@@ -261,10 +272,6 @@ impl MjEnv {
         self.qpos_mut().copy_from_slice(qpos);
         self.qvel_mut().copy_from_slice(qvel);
 
-        if self.na() == 0 {
-            // TODO: double check (act is not used, nothing to clear)
-        }
-
         unsafe {
             no_render::mj_forward(self.model().ptr(), self.data().ptr());
         }
@@ -282,23 +289,31 @@ impl MjEnv {
 
         self.ctrl_mut().copy_from_slice(ctrl);
 
-        for _ in 0..self.frame_skip {
-            self.simulation.step();
-        }
+        let model_ptr = self.model().ptr();
+        let data_ptr = self.state.ptr();
 
         unsafe {
-            no_render::mj_rnePostConstraint(self.model().ptr(), self.data().ptr());
+            let frame_skip = self.frame_skip;
+            for _ in 0..frame_skip {
+                no_render::mj_step(model_ptr, data_ptr);
+            }
+            no_render::mj_rnePostConstraint(model_ptr, data_ptr);
         }
 
         Ok(())
     }
 
     pub fn reset(&mut self) {
-        self.simulation.reset();
+        unsafe {
+            no_render::mj_resetData(self.model().ptr(), self.state.ptr());
+            no_render::mj_forward(self.model().ptr(), self.state.ptr());
+        }
     }
 
     pub fn reset_to_initial(&mut self) -> Result<(), Error> {
-        self.set_state(&self.init_qpos.clone(), &self.init_qvel.clone())
+        let qpos = self.init_qpos.clone();
+        let qvel = self.init_qvel.clone();
+        self.set_state(&qpos, &qvel)
     }
 
     pub fn state_vector(&self) -> Vec<f64> {
@@ -353,45 +368,143 @@ impl MjEnv {
         na::DVector::from_column_slice(self.ten_length())
     }
 
+    fn slice_arrays_to_matrix(rows: usize, cols: usize, data: &[f64]) -> na::DMatrix<f64> {
+        na::DMatrix::from_row_slice(rows, cols, data)
+    }
+
     pub fn xipos_matrix(&self) -> na::DMatrix<f64> {
         let data = self.xipos();
-        na::DMatrix::from_row_slice(data.len(), 3, unsafe {
-            std::slice::from_raw_parts(data.as_ptr() as *const f64, data.len() * 3)
-        })
+        let flat_len = data.len() * 3;
+        let flat_data =
+            unsafe { std::slice::from_raw_parts(data.as_ptr() as *const f64, flat_len) };
+        Self::slice_arrays_to_matrix(data.len(), 3, flat_data)
     }
 
     pub fn xpos_matrix(&self) -> na::DMatrix<f64> {
         let data = self.xpos();
-        na::DMatrix::from_row_slice(data.len(), 3, unsafe {
-            std::slice::from_raw_parts(data.as_ptr() as *const f64, data.len() * 3)
-        })
+        let flat_len = data.len() * 3;
+        let flat_data =
+            unsafe { std::slice::from_raw_parts(data.as_ptr() as *const f64, flat_len) };
+        Self::slice_arrays_to_matrix(data.len(), 3, flat_data)
     }
 
     pub fn geom_xpos_matrix(&self) -> na::DMatrix<f64> {
         let data = self.geom_xpos();
-        na::DMatrix::from_row_slice(data.len(), 3, unsafe {
-            std::slice::from_raw_parts(data.as_ptr() as *const f64, data.len() * 3)
-        })
+        let flat_len = data.len() * 3;
+        let flat_data =
+            unsafe { std::slice::from_raw_parts(data.as_ptr() as *const f64, flat_len) };
+        Self::slice_arrays_to_matrix(data.len(), 3, flat_data)
     }
 
     pub fn site_xpos_matrix(&self) -> na::DMatrix<f64> {
         let data = self.site_xpos();
-        na::DMatrix::from_row_slice(data.len(), 3, unsafe {
-            std::slice::from_raw_parts(data.as_ptr() as *const f64, data.len() * 3)
-        })
+        let flat_len = data.len() * 3;
+        let flat_data =
+            unsafe { std::slice::from_raw_parts(data.as_ptr() as *const f64, flat_len) };
+        Self::slice_arrays_to_matrix(data.len(), 3, flat_data)
     }
 
     pub fn cvel_matrix(&self) -> na::DMatrix<f64> {
         let data = self.cvel();
-        na::DMatrix::from_row_slice(data.len(), 6, unsafe {
-            std::slice::from_raw_parts(data.as_ptr() as *const f64, data.len() * 6)
-        })
+        let flat_len = data.len() * 6;
+        let flat_data =
+            unsafe { std::slice::from_raw_parts(data.as_ptr() as *const f64, flat_len) };
+        Self::slice_arrays_to_matrix(data.len(), 6, flat_data)
     }
 
     pub fn cfrc_ext_matrix(&self) -> na::DMatrix<f64> {
         let data = self.cfrc_ext();
-        na::DMatrix::from_row_slice(data.len(), 6, unsafe {
-            std::slice::from_raw_parts(data.as_ptr() as *const f64, data.len() * 6)
-        })
+        let flat_len = data.len() * 6;
+        let flat_data =
+            unsafe { std::slice::from_raw_parts(data.as_ptr() as *const f64, flat_len) };
+        Self::slice_arrays_to_matrix(data.len(), 6, flat_data)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::PathBuf;
+    use tempfile::tempdir;
+
+    const TEST_MODEL_XML: &str = r#"
+    <mujoco model="simple_test">
+        <compiler angle="radian"/>
+        <option timestep="0.01" gravity="0 0 -9.81"/>
+        <worldbody>
+            <light pos="0 0 3" dir="0 0 -1" />
+            <geom type="plane" size="10 10 0.1" rgba=".9 .9 .9 1"/>
+            <!-- Note the pos="0 0 1", this is critical for testing initialization -->
+            <body name="slider_body" pos="0 0 1">
+                <joint name="slide_x" type="slide" axis="1 0 0" />
+                <geom type="box" size="0.1 0.1 0.1" mass="1.0" />
+            </body>
+        </worldbody>
+        <actuator>
+            <motor name="motor_x" joint="slide_x" gear="10.0" />
+        </actuator>
+    </mujoco>
+    "#;
+
+    struct TestAsset {
+        _dir: tempfile::TempDir,
+        path: PathBuf,
+    }
+
+    impl TestAsset {
+        fn new() -> Self {
+            let dir = tempdir().expect("Failed to create temp dir");
+            let file_path = dir.path().join("test_model.xml");
+            let mut file = File::create(&file_path).expect("Failed to create temp xml file");
+            file.write_all(TEST_MODEL_XML.as_bytes())
+                .expect("Failed to write xml content");
+
+            Self {
+                _dir: dir,
+                path: file_path,
+            }
+        }
+
+        fn path_str(&self) -> &str {
+            self.path.to_str().expect("Path is not valid unicode")
+        }
+    }
+
+    #[test]
+    fn test_initialization() {
+        let asset = TestAsset::new();
+        let frame_skip = 4;
+
+        let env = MjEnv::new(asset.path_str(), frame_skip);
+        assert!(
+            env.is_ok(),
+            "MjEnv should initialize successfully with valid XML"
+        );
+
+        let env = env.unwrap();
+        assert_eq!(env.nq(), 1);
+        assert_eq!(env.nv(), 1);
+        assert_eq!(env.nu(), 1);
+
+        let expected_dt = 0.01 * frame_skip as f64;
+        assert!(
+            (env.dt() - expected_dt).abs() < 1e-6,
+            "DT should be timestep * frame_skip"
+        );
+    }
+
+    #[test]
+    fn test_initial_sensors_loaded() {
+        let asset = TestAsset::new();
+        let env = MjEnv::new(asset.path_str(), 1).unwrap();
+        let pos = env.body_vector("slider_body").expect("Body should exist");
+
+        assert!(
+            (pos.z - 1.0).abs() < 1e-6,
+            "Body Z position should be 1.0 from XML (Got: {})",
+            pos.z
+        );
     }
 }
