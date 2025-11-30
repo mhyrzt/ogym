@@ -13,7 +13,7 @@ pub struct PusherConfig {
 impl Default for PusherConfig {
     fn default() -> Self {
         Self {
-            xml_file: "model.xml".to_string(),
+            xml_file: include_str!("model.xml").to_string(),
             frame_skip: 5,
             reward_near_weight: 0.5,
             reward_dist_weight: 1.0,

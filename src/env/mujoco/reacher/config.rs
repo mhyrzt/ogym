@@ -12,7 +12,7 @@ pub struct ReacherConfig {
 impl Default for ReacherConfig {
     fn default() -> Self {
         Self {
-            xml_file: "model.xml".to_string(),
+            xml_file: include_str!("model.xml").to_string(),
             frame_skip: 2,
             reward_dist_weight: 1.0,
             reward_control_weight: 1.0,

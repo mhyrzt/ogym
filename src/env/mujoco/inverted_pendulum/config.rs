@@ -16,7 +16,7 @@ impl Default for InvertedPendulumConfig {
         default_camera_config.insert("distance".to_string(), 2.04);
 
         Self {
-            xml_file: "model.xml".to_string(),
+            xml_file: include_str!("model.xml").to_string(),
             frame_skip: 2,
             reset_noise_scale: 0.01,
             observation_shape: (4,),

@@ -12,6 +12,8 @@ keywords = ["reinforcement-learning", "gym", "ai", "machine-learning", "rl"]
 categories = ["science", "algorithms", "simulation"]
 documentation = "https://docs.rs/ogym"
 
+include = ["src/**", "Cargo.toml", "README.md", "LICENSE", "src/**/*.xml"]
+
 [dependencies]
 nalgebra = "0.33.2"
 mujoco-rust = { version = "0.0.6" }

@@ -14,7 +14,7 @@ pub struct MjEnv {
 
 impl MjEnv {
     pub fn new(path: &str, frame_skip: u32) -> Result<Self, Error> {
-        let model = Model::from_xml(path).map_err(Error::MjInitError)?;
+        let model = Model::from_xml_str(path).map_err(Error::MjInitError)?;
         let simulation = Simulation::new(model);
         let state = State::new(&simulation.model);
 

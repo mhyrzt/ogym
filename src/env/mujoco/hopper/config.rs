@@ -17,7 +17,7 @@ pub struct HopperConfig {
 impl Default for HopperConfig {
     fn default() -> Self {
         Self {
-            xml_file: "model.xml".to_string(),
+            xml_file: include_str!("model.xml").to_string(),
             frame_skip: 4,
             forward_reward_weight: 1.0,
             ctrl_cost_weight: 1e-3,

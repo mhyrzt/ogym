@@ -13,7 +13,7 @@ pub struct InvertedDoublePendulumConfig {
 impl Default for InvertedDoublePendulumConfig {
     fn default() -> Self {
         Self {
-            xml_file: "model.xml".to_string(),
+            xml_file: include_str!("model.xml").to_string(),
             frame_skip: 5,
             healthy_reward: 10.0,
             reset_noise_scale: 0.1,
