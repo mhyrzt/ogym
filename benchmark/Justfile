@@ -33,7 +33,7 @@ clean:
 # -----------------------------------------------------------------------------
 
 # Compare Acrobot performance
-hyperfine-compare-acrobot: build prepare
+acrobot: build prepare
     @echo "Benchmarking Acrobot..."
     hyperfine --warmup 3 \
         --export-json "{{results_dir}}/acrobot.json" \
@@ -41,7 +41,7 @@ hyperfine-compare-acrobot: build prepare
         --command-name "gym-acrobot" 'uv run {{py_bench_dir}}/acrobot_gym.py'
 
 # Compare CartPole performance
-hyperfine-compare-cartpole: build prepare
+cartpole: build prepare
     @echo "Benchmarking CartPole..."
     hyperfine --warmup 3 \
         --export-json "{{results_dir}}/cartpole.json" \
@@ -49,7 +49,7 @@ hyperfine-compare-cartpole: build prepare
         --command-name "gym-cartpole" 'uv run {{py_bench_dir}}/cartpole_gym.py'
 
 # Compare MountainCar performance
-hyperfine-compare-mountain-car: build prepare
+mountain-car: build prepare
     @echo "Benchmarking MountainCar..."
     hyperfine --warmup 3 \
         --export-json "{{results_dir}}/mountain_car.json" \
@@ -57,21 +57,109 @@ hyperfine-compare-mountain-car: build prepare
         --command-name "gym-mountain-car" 'uv run {{py_bench_dir}}/mountain_car_gym.py'
 
 # Compare Pendulum performance
-hyperfine-compare-pendulum: build prepare
+pendulum: build prepare
     @echo "Benchmarking Pendulum..."
     hyperfine --warmup 3 \
         --export-json "{{results_dir}}/pendulum.json" \
         --command-name "ogym-pendulum" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} pendulum' \
         --command-name "gym-pendulum" 'uv run {{py_bench_dir}}/pendulum_gym.py'
 
+# Compare Ant performance
+ant: build prepare
+    @echo "Benchmarking Ant..."
+    hyperfine --show-output --warmup 3 \
+        --export-json "{{results_dir}}/ant.json" \
+        --command-name "ogym-ant" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} ant' \
+        --command-name "gym-ant" 'uv run {{py_bench_dir}}/ant_gym.py'
+
+# Compare HalfCheetah performance
+half-cheetah: build prepare
+    @echo "Benchmarking HalfCheetah..."
+    hyperfine --warmup 3 \
+        --export-json "{{results_dir}}/half_cheetah.json" \
+        --command-name "ogym-half-cheetah" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} half_cheetah' \
+        --command-name "gym-half-cheetah" 'uv run {{py_bench_dir}}/half_cheetah_gym.py'
+
+# Compare Hopper performance
+hopper: build prepare
+    @echo "Benchmarking Hopper..."
+    hyperfine --warmup 3 \
+        --export-json "{{results_dir}}/hopper.json" \
+        --command-name "ogym-hopper" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} hopper' \
+        --command-name "gym-hopper" 'uv run {{py_bench_dir}}/hopper_gym.py'
+
+# Compare Humanoid performance
+humanoid: build prepare
+    @echo "Benchmarking Humanoid..."
+    hyperfine --warmup 3 \
+        --export-json "{{results_dir}}/humanoid.json" \
+        --command-name "ogym-humanoid" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} humanoid' \
+        --command-name "gym-humanoid" 'uv run {{py_bench_dir}}/gym_benchmarks.py humanoid'
+
+# Compare HumanoidStandup performance
+humanoid-standup: build prepare
+    @echo "Benchmarking HumanoidStandup..."
+    hyperfine --warmup 3 \
+        --export-json "{{results_dir}}/humanoid_standup.json" \
+        --command-name "ogym-humanoid-standup" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} humanoid_standup' \
+        --command-name "gym-humanoid-standup" 'uv run {{py_bench_dir}}/gym_benchmarks.py humanoid_standup'
+
+# Compare InvertedDoublePendulum performance
+inverted-double-pendulum: build prepare
+    @echo "Benchmarking InvertedDoublePendulum..."
+    hyperfine --warmup 3 \
+        --export-json "{{results_dir}}/inverted_double_pendulum.json" \
+        --command-name "ogym-inverted-double-pendulum" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} inverted_double_pendulum' \
+        --command-name "gym-inverted-double-pendulum" 'uv run {{py_bench_dir}}/gym_benchmarks.py inverted_double_pendulum'
+
+# Compare InvertedPendulum performance
+inverted-pendulum: build prepare
+    @echo "Benchmarking InvertedPendulum..."
+    hyperfine --warmup 3 \
+        --export-json "{{results_dir}}/inverted_pendulum.json" \
+        --command-name "ogym-inverted-pendulum" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} inverted_pendulum' \
+        --command-name "gym-inverted-pendulum" 'uv run {{py_bench_dir}}/gym_benchmarks.py inverted_pendulum'
+
+# Compare Pusher performance
+pusher: build prepare
+    @echo "Benchmarking Pusher..."
+    hyperfine --warmup 3 \
+        --export-json "{{results_dir}}/pusher.json" \
+        --command-name "ogym-pusher" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} pusher' \
+        --command-name "gym-pusher" 'uv run {{py_bench_dir}}/gym_benchmarks.py pusher'
+
+# Compare Reacher performance
+reacher: build prepare
+    @echo "Benchmarking Reacher..."
+    hyperfine --warmup 3 \
+        --export-json "{{results_dir}}/reacher.json" \
+        --command-name "ogym-reacher" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} reacher' \
+        --command-name "gym-reacher" 'uv run {{py_bench_dir}}/gym_benchmarks.py reacher'
+
+# Compare Swimmer performance
+swimmer: build prepare
+    @echo "Benchmarking Swimmer..."
+    hyperfine --warmup 3 \
+        --export-json "{{results_dir}}/swimmer.json" \
+        --command-name "ogym-swimmer" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} swimmer' \
+        --command-name "gym-swimmer" 'uv run {{py_bench_dir}}/gym_benchmarks.py swimmer'
+
+# Compare Walker2d performance
+walker2d: build prepare
+    @echo "Benchmarking Walker2d..."
+    hyperfine --warmup 3 \
+        --export-json "{{results_dir}}/walker2d.json" \
+        --command-name "ogym-walker2d" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} walker2d' \
+        --command-name "gym-walker2d" 'uv run {{py_bench_dir}}/walker2d_gym.py'
+
 # -----------------------------------------------------------------------------
 # Comprehensive Benchmarks
 # -----------------------------------------------------------------------------
 
 # Run a massive comparison of all environments in one Hyperfine session
-hyperfine-compare-all: build prepare
+all: build prepare
     @echo "Running comprehensive benchmark suite..."
-    hyperfine --warmup 3 \
+    hyperfine --show-output --warmup 3 \
         --export-json "{{results_dir}}/all_results.json" \
         --export-markdown "{{results_dir}}/all_results.md" \
         --command-name "ogym-acrobot"      'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} acrobot' \
@@ -81,14 +169,36 @@ hyperfine-compare-all: build prepare
         --command-name "ogym-mountain-car" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} mountain_car' \
         --command-name "gym-mountain-car"  'uv run {{py_bench_dir}}/mountain_car_gym.py' \
         --command-name "ogym-pendulum"     'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} pendulum' \
-        --command-name "gym-pendulum"      'uv run {{py_bench_dir}}/pendulum_gym.py'
+        --command-name "gym-pendulum"      'uv run {{py_bench_dir}}/pendulum_gym.py' \
+        --command-name "ogym-ant"          'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} ant' \
+        --command-name "gym-ant"           'uv run {{py_bench_dir}}/ant_gym.py' \
+        --command-name "ogym-half-cheetah" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} half_cheetah' \
+        --command-name "gym-half-cheetah"  'uv run {{py_bench_dir}}/half_cheetah_gym.py' \
+        --command-name "ogym-hopper"       'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} hopper' \
+        --command-name "gym-hopper"        'uv run {{py_bench_dir}}/hopper_gym.py' \
+        --command-name "ogym-humanoid"     'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} humanoid' \
+        --command-name "gym-humanoid"      'uv run {{py_bench_dir}}/gym_benchmarks.py humanoid' \
+        --command-name "ogym-humanoid-standup" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} humanoid_standup' \
+        --command-name "gym-humanoid-standup" 'uv run {{py_bench_dir}}/gym_benchmarks.py humanoid_standup' \
+        --command-name "ogym-inverted-double-pendulum" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} inverted_double_pendulum' \
+        --command-name "gym-inverted-double-pendulum" 'uv run {{py_bench_dir}}/gym_benchmarks.py inverted_double_pendulum' \
+        --command-name "ogym-inverted-pendulum" 'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} inverted_pendulum' \
+        --command-name "gym-inverted-pendulum" 'uv run {{py_bench_dir}}/gym_benchmarks.py inverted_pendulum' \
+        --command-name "ogym-pusher"       'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} pusher' \
+        --command-name "gym-pusher"        'uv run {{py_bench_dir}}/gym_benchmarks.py pusher' \
+        --command-name "ogym-reacher"      'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} reacher' \
+        --command-name "gym-reacher"       'uv run {{py_bench_dir}}/gym_benchmarks.py reacher' \
+        --command-name "ogym-swimmer"      'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} swimmer' \
+        --command-name "gym-swimmer"       'uv run {{py_bench_dir}}/gym_benchmarks.py swimmer' \
+        --command-name "ogym-walker2d"     'DYLD_LIBRARY_PATH={{mujoco_lib_path}}:$DYLD_LIBRARY_PATH {{rust_bin_path}} walker2d' \
+        --command-name "gym-walker2d"      'uv run {{py_bench_dir}}/walker2d_gym.py'
 
 # -----------------------------------------------------------------------------
 # Visualization & Full Workflow (As described in README)
 # -----------------------------------------------------------------------------
 
 # Generate plots from results (Requires visualize_results.py)
-plot-results:
+plot:
     @if [ -f "visualize_results.py" ]; then \
         echo "Generating visualizations..."; \
         uv run visualize_results.py; \
@@ -97,5 +207,5 @@ plot-results:
     fi
 
 # Run everything: Clean, Build, Benchmark, and Plot
-full-comparison: clean hyperfine-compare-all plot-results
+full: clean all plot
     @echo "Full comparison complete. Check {{results_dir}}/ for outputs."

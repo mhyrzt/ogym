@@ -4,13 +4,23 @@ This benchmark suite compares the performance of `ogym` (our custom Rust library
 
 ## Overview
 
-The benchmark suite includes four classic control environments:
+The benchmark suite includes multiple classic control and physics simulation environments:
+
+### Classic Control Environments
 - **Acrobot**: A two-link pendulum with only the second joint actuated
 - **CartPole**: A pole balancing on a cart
-- **MountainCar**: A car trying to climb a hill
-- **Pendulum**: A simple pendulum swing-up task
+- **MountainCar**: A car in a valley that needs to reach the top of a hill
+- **Pendulum**: A simple pendulum that swings freely
 
-Each environment runs 10,000 steps with random actions, measuring the total execution time. Hyperfine automatically determines the number of runs and provides statistical analysis.
+### Physics Simulation Environments
+- **Ant**: A 3D four-legged robot navigating terrain (MuJoCo)
+- **BipedalWalker**: A 2D two-legged robot walking on procedurally generated terrain (Rapier)
+- **HalfCheetah**: A 3D two-legged cheetah-like robot (MuJoCo)
+- **Hopper**: A 2D one-legged robot hopping forward (MuJoCo)
+- **LunarLander**: A 2D lander trying to land on the moon (Rapier)
+- **Walker2d**: A 2D two-legged robot walking forward (MuJoCo)
+
+Each environment runs 10,000 steps (1,000 for physics-based environments) with random actions, measuring the total execution time. Hyperfine automatically determines the number of runs and provides statistical analysis.
 
 ## Prerequisites
 
