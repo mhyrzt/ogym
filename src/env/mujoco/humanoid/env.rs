@@ -1,97 +1,86 @@
 use super::config::HumanoidConfig;
-use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use crate::env::environment::{Environment, Experience, Terminal};
-use nalgebra::DVector;
+use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
+use nalgebra::{DVector, Vector2};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::collections::HashMap;
 
 pub struct MujocoHumanoidEnv {
-    pub env: MjEnv,
-    pub config: HumanoidConfig,
-    pub init_qpos: Vec<f64>,
-    pub init_qvel: Vec<f64>,
+    pub(crate) env: MjEnv,
+    pub(crate) config: HumanoidConfig,
+    pub(crate) init_qpos: Vec<f64>,
+    pub(crate) init_qvel: Vec<f64>,
+    pub(crate) rng: StdRng,
+    pub(crate) step_count: usize,
 }
 
 impl MujocoHumanoidEnv {
     pub fn new(config: Option<HumanoidConfig>) -> Result<Self, Error> {
         let config = config.unwrap_or_default();
-        let env = MjEnv::new(&config.xml_file, config.frame_skip)?;
+        let env = MjEnv::new(config.xml(), config.frame_skip())?;
+
+        let init_qpos = env.init_qpos().to_vec();
+        let init_qvel = env.init_qvel().to_vec();
+
         Ok(Self {
-            init_qpos: env.init_qpos().into(),
-            init_qvel: env.init_qvel().into(),
+            init_qpos,
+            init_qvel,
             config,
             env,
+            rng: StdRng::from_os_rng(),
+            step_count: 0,
         })
     }
 
-    // Helper methods
     fn _get_obs(&self) -> Result<DVector<f64>, Error> {
-        let mut observation = Vec::new();
+        let qpos = self.env.qpos();
+        let qvel = self.env.qvel();
 
-        let mut position = self.env.qpos().to_vec();
-        let velocity = self.env.qvel().to_vec();
-
-        // Get additional observation components based on config
-        let com_inertia = if self.config.include_cinert_in_observation {
-            let cinert = self.env.cinert();
-            let mut cinert_flat = Vec::new();
-            for body_cinert in cinert.iter().skip(1) {
-                // Skip first body
-                for &val in body_cinert.iter() {
-                    cinert_flat.push(val);
-                }
-            }
-            cinert_flat
+        let skip_pos = if self.config.exclude_current_positions_from_observation {
+            2
         } else {
-            Vec::new()
+            0
         };
+        let position_iter = qpos.iter().skip(skip_pos);
 
-        let com_velocity = if self.config.include_cvel_in_observation {
-            let cvel = self.env.cvel();
-            let mut cvel_flat = Vec::new();
-            for body_cvel in cvel.iter().skip(1) {
-                // Skip first body
-                for &val in body_cvel.iter() {
-                    cvel_flat.push(val);
-                }
-            }
-            cvel_flat
-        } else {
-            Vec::new()
-        };
+        let velocity_iter = qvel.iter();
 
-        let actuator_forces = if self.config.include_qfrc_actuator_in_observation {
-            let qfrc = self.env.qfrc_actuator();
-            qfrc[6..].to_vec() // Skip first 6 values
-        } else {
-            Vec::new()
-        };
+        let cinert_iter = self
+            .config
+            .include_cinert_in_observation
+            .then(|| self.env.cinert().iter().skip(1).flatten())
+            .into_iter()
+            .flatten();
 
-        let external_contact_forces = if self.config.include_cfrc_ext_in_observation {
-            let cfrc_ext = self.env.cfrc_ext();
-            let mut cfrc_ext_flat = Vec::new();
-            for body_cfrc in cfrc_ext.iter().skip(1) {
-                // Skip first body
-                for &val in body_cfrc.iter() {
-                    cfrc_ext_flat.push(val);
-                }
-            }
-            cfrc_ext_flat
-        } else {
-            Vec::new()
-        };
+        let cvel_iter = self
+            .config
+            .include_cvel_in_observation
+            .then(|| self.env.cvel().iter().skip(1).flatten())
+            .into_iter()
+            .flatten();
 
-        if self.config.exclude_current_positions_from_observation {
-            // Skip first 2 elements (x, y position)
-            position = position[2..].to_vec();
-        }
+        let qfrc_iter = self
+            .config
+            .include_qfrc_actuator_in_observation
+            .then(|| self.env.qfrc_actuator().iter().skip(6))
+            .into_iter()
+            .flatten();
 
-        observation.extend_from_slice(&position);
-        observation.extend_from_slice(&velocity);
-        observation.extend_from_slice(&com_inertia);
-        observation.extend_from_slice(&com_velocity);
-        observation.extend_from_slice(&actuator_forces);
-        observation.extend_from_slice(&external_contact_forces);
+        let cfrc_ext_iter = self
+            .config
+            .include_cfrc_ext_in_observation
+            .then(|| self.env.cfrc_ext().iter().skip(1).flatten())
+            .into_iter()
+            .flatten();
+
+        let observation: Vec<f64> = position_iter
+            .chain(velocity_iter)
+            .chain(cinert_iter)
+            .chain(cvel_iter)
+            .chain(qfrc_iter)
+            .chain(cfrc_ext_iter)
+            .cloned()
+            .collect();
 
         Ok(DVector::from_vec(observation))
     }
@@ -102,107 +91,74 @@ impl MujocoHumanoidEnv {
         action: &DVector<f64>,
     ) -> Result<(f64, HashMap<String, f64>), Error> {
         let forward_reward = self.config.forward_reward_weight * x_velocity;
-        let healthy_reward = self.healthy_reward()?;
-        let rewards = forward_reward + healthy_reward;
+
+        let healthy_reward = if self.is_healthy()? {
+            self.config.healthy_reward
+        } else {
+            0.0
+        };
 
         let ctrl_cost = self._control_cost(action)?;
         let contact_cost = self._contact_cost()?;
-        let costs = ctrl_cost + contact_cost;
-        let reward = rewards - costs;
 
-        let mut reward_info = HashMap::new();
-        reward_info.insert("reward_survive".to_string(), healthy_reward);
-        reward_info.insert("reward_forward".to_string(), forward_reward);
-        reward_info.insert("reward_ctrl".to_string(), -ctrl_cost);
-        reward_info.insert("reward_contact".to_string(), -contact_cost);
+        let reward = forward_reward + healthy_reward - ctrl_cost - contact_cost;
 
-        Ok((reward, reward_info))
+        let mut info = HashMap::new();
+        info.insert("reward_survive".to_string(), healthy_reward);
+        info.insert("reward_forward".to_string(), forward_reward);
+        info.insert("reward_ctrl".to_string(), -ctrl_cost);
+        info.insert("reward_contact".to_string(), -contact_cost);
+
+        Ok((reward, info))
     }
 
     fn _control_cost(&self, _action: &DVector<f64>) -> Result<f64, Error> {
-        let squared_ctrl: f64 = self.env.ctrl().iter().map(|x| x * x).sum();
-        Ok(self.config.ctrl_cost_weight * squared_ctrl)
+        let sum_sq_ctrl: f64 = self.env.ctrl().iter().map(|&x| x.powi(2)).sum();
+
+        Ok(self.config.ctrl_cost_weight * sum_sq_ctrl)
     }
 
     fn _contact_cost(&self) -> Result<f64, Error> {
-        let contact_forces = self.env.cfrc_ext();
-        let mut total_force = 0.0;
-        for body_force in contact_forces.iter() {
-            for &f in body_force.iter() {
-                total_force += f * f;
-            }
-        }
-        let contact_cost = self.config.contact_cost_weight * total_force;
-        let clamped_cost = contact_cost.clamp(
+        let sum_sq_force: f64 = self
+            .env
+            .cfrc_ext()
+            .iter()
+            .flatten()
+            .map(|&f| f.powi(2))
+            .sum();
+
+        let cost = self.config.contact_cost_weight * sum_sq_force;
+        Ok(cost.clamp(
             self.config.contact_cost_range.0,
             self.config.contact_cost_range.1,
-        );
-
-        Ok(clamped_cost)
+        ))
     }
 
-    fn is_healthy(&self) -> Result<bool, Error> {
-        let min_z = self.config.healthy_z_range.0;
-        let max_z = self.config.healthy_z_range.1;
-        let z_pos = self.env.qpos()[2]; // Third element is z position
-
-        Ok(z_pos > min_z && z_pos < max_z)
+    pub fn is_healthy(&self) -> Result<bool, Error> {
+        let z_pos = self.env.qpos()[2];
+        let (min_z, max_z) = self.config.healthy_z_range;
+        Ok(z_pos >= min_z && z_pos <= max_z)
     }
 
-    fn healthy_reward(&self) -> Result<f64, Error> {
-        if self.is_healthy()? {
-            Ok(self.config.healthy_reward)
-        } else {
-            Ok(0.0)
-        }
-    }
-
-    fn _mass_center(&self) -> Result<nalgebra::Vector2<f64>, Error> {
-        // Calculate center of mass similar to the Python implementation
+    fn _mass_center(&self) -> Result<Vector2<f64>, Error> {
         let body_mass = self.env.body_mass();
         let xipos = self.env.xipos();
 
-        let mut num_x = 0.0;
-        let mut num_y = 0.0;
-        let mut denom = 0.0;
+        let (mass_x, mass_y, total_mass) = body_mass
+            .iter()
+            .zip(xipos.iter())
+            .fold((0.0, 0.0, 0.0), |acc, (&mass, &pos)| {
+                (acc.0 + mass * pos[0], acc.1 + mass * pos[1], acc.2 + mass)
+            });
 
-        for (i, &mass) in body_mass.iter().enumerate() {
-            if i < xipos.len() {
-                let pos = xipos[i];
-                num_x += mass * pos[0];
-                num_y += mass * pos[1];
-                denom += mass;
-            }
-        }
-
-        if denom > 0.0 {
-            Ok(nalgebra::Vector2::new(num_x / denom, num_y / denom))
+        if total_mass > 0.0 {
+            Ok(Vector2::new(mass_x / total_mass, mass_y / total_mass))
         } else {
-            Ok(nalgebra::Vector2::new(0.0, 0.0))
+            Ok(Vector2::new(0.0, 0.0))
         }
-    }
-
-    fn _get_reset_info(&self) -> Result<HashMap<String, f64>, Error> {
-        let mut info = HashMap::new();
-        info.insert("x_position".to_string(), self.env.qpos()[0]);
-        info.insert("y_position".to_string(), self.env.qpos()[1]);
-        info.insert(
-            "tendon_length".to_string(),
-            self.env.ten_length().iter().sum(),
-        ); // Sum as a placeholder since it's an array
-        info.insert(
-            "tendon_velocity".to_string(),
-            self.env.ten_velocity().iter().sum(),
-        ); // Sum as a placeholder since it's an array
-        info.insert(
-            "distance_from_origin".to_string(),
-            (self.env.qpos()[0].powi(2) + self.env.qpos()[1].powi(2)).sqrt(),
-        );
-        Ok(info)
     }
 }
 
-// Define type aliases for clarity
 type Action = DVector<f64>;
 type State = DVector<f64>;
 type Info = HashMap<String, f64>;
@@ -213,106 +169,207 @@ impl Environment for MujocoHumanoidEnv {
     type Info = Info;
 
     fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
-        self.env.reset_to_initial()?;
+        if let Some(s) = seed {
+            self.rng = StdRng::seed_from_u64(s);
+        }
 
-        // Apply noise to initial state
-        let mut rng = match seed {
-            Some(s) => StdRng::seed_from_u64(s),
-            None => StdRng::from_os_rng(),
-        };
+        self.env.reset_to_initial()?;
+        self.step_count = 0;
 
         let noise_low = -self.config.reset_noise_scale;
         let noise_high = self.config.reset_noise_scale;
 
-        // Add noise to positions
-        let mut qpos = self.init_qpos.clone();
-        for i in 0..qpos.len() {
-            qpos[i] += rng.random_range(noise_low..noise_high);
-        }
+        let qpos: Vec<f64> = self
+            .init_qpos
+            .iter()
+            .map(|&x| x + self.rng.random_range(noise_low..noise_high))
+            .collect();
 
-        // Add noise to velocities
-        let mut qvel = self.init_qvel.clone();
-        for i in 0..qvel.len() {
-            qvel[i] += rng.random_range(noise_low..noise_high);
-        }
+        let qvel: Vec<f64> = self
+            .init_qvel
+            .iter()
+            .map(|&x| x + self.rng.random_range(noise_low..noise_high))
+            .collect();
 
         self.env.set_state(&qpos, &qvel)?;
 
-        let observation = self._get_obs()?;
-        let info = self._get_reset_info()?;
+        let obs = self._get_obs()?;
 
-        Ok((observation, info))
+        let mut info = HashMap::new();
+        info.insert("z_position".to_string(), self.env.qpos()[2]);
+
+        Ok((obs, info))
     }
 
     fn step(
         &mut self,
         action: Self::Action,
     ) -> Result<Experience<Self::State, Self::Info, Self::Action>, Error> {
-        // Store current state
         let curr_state = self.state()?;
+        let xy_pos_before = self._mass_center()?;
 
-        // Get position before simulation (for center of mass calculation)
-        let xy_position_before = self._mass_center()?;
-
-        // Apply action and simulate
         self.env.do_simulation(action.as_slice())?;
+        self.step_count += 1;
 
-        // Get position after simulation
-        let xy_position_after = self._mass_center()?;
-
-        // Calculate velocity
+        let xy_pos_after = self._mass_center()?;
         let dt = self.env.dt();
-        let xy_velocity = (xy_position_after - xy_position_before) / dt;
-        let x_velocity = xy_velocity[0];
+        let xy_velocity = (xy_pos_after - xy_pos_before) / dt;
+        let x_velocity = xy_velocity.x;
 
-        // Get new observation
         let next_state = self._get_obs()?;
-
-        // Calculate reward
         let (reward, reward_info) = self._calculate_reward(x_velocity, &action)?;
 
-        // Determine termination
-        let terminated = (!self.is_healthy()?) && self.config.terminate_when_unhealthy;
-        let truncated = self.env.time() > 1000.0; // Common truncation condition
+        let is_healthy = self.is_healthy()?;
+        let terminated = self.config.terminate_when_unhealthy && !is_healthy;
 
-        // Create info dict
-        let mut info = HashMap::new();
+        let truncated = self.step_count >= self.config.max_episode_steps;
+
+        let mut info = reward_info;
         info.insert("x_position".to_string(), self.env.qpos()[0]);
         info.insert("y_position".to_string(), self.env.qpos()[1]);
-        info.insert(
-            "tendon_length".to_string(),
-            self.env.ten_length().iter().sum(),
-        ); // Sum as a placeholder since it's an array
-        info.insert(
-            "tendon_velocity".to_string(),
-            self.env.ten_velocity().iter().sum(),
-        ); // Sum as a placeholder since it's an array
-        info.insert(
-            "distance_from_origin".to_string(),
-            (self.env.qpos()[0].powi(2) + self.env.qpos()[1].powi(2)).sqrt(),
-        );
+        info.insert("z_position".to_string(), self.env.qpos()[2]);
         info.insert("x_velocity".to_string(), x_velocity);
-        info.insert("y_velocity".to_string(), xy_velocity[1]);
-        info.extend(reward_info);
+        info.insert("y_velocity".to_string(), xy_velocity.y);
 
-        let terminal = Terminal::from_flags(terminated, truncated);
+        let ten_len_sum: f64 = self.env.ten_length().iter().sum();
+        let ten_vel_sum: f64 = self.env.ten_velocity().iter().sum();
+        info.insert("tendon_length_sum".to_string(), ten_len_sum);
+        info.insert("tendon_velocity_sum".to_string(), ten_vel_sum);
+
+        let terminal_flags = Terminal::from_flags(terminated, truncated);
 
         Ok(Experience::new(
-            curr_state, reward, action, next_state, info, terminal,
-            0, // Step counter would need to be tracked separately
+            curr_state,
+            reward,
+            action,
+            next_state,
+            info,
+            terminal_flags,
+            self.step_count as u32,
         ))
     }
 
     fn is_terminal(&self) -> Result<bool, Error> {
-        Ok((!self.is_healthy()?) && self.config.terminate_when_unhealthy)
+        let unhealthy = !self.is_healthy()?;
+        Ok(self.config.terminate_when_unhealthy && unhealthy)
     }
 
     fn is_truncated(&self) -> bool {
-        // For now, using a simple time-based truncation
-        self.env.time() > 1000.0
+        self.step_count >= self.config.max_episode_steps
     }
 
     fn state(&self) -> Result<Self::State, Error> {
         self._get_obs()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanity_initialization() {
+        let config = HumanoidConfig::default().with_frame_skip(2);
+        let env_res = MujocoHumanoidEnv::new(Some(config));
+        assert!(
+            env_res.is_ok(),
+            "Environment should initialize with valid config"
+        );
+
+        let env = env_res.unwrap();
+        assert_eq!(env.config.frame_skip, 2, "Config settings should persist");
+        assert!(!env.init_qpos.is_empty(), "Initial QPOS should be loaded");
+    }
+
+    #[test]
+    fn test_reset_noise_functional() {
+        let config = HumanoidConfig::default().with_reset_noise_scale(1.0);
+        let mut env = MujocoHumanoidEnv::new(Some(config)).unwrap();
+
+        let (_, _) = env.reset(Some(1)).unwrap();
+        let start_pos_1 = env.env.qpos().to_vec();
+
+        let (_, _) = env.reset(Some(2)).unwrap();
+        let start_pos_2 = env.env.qpos().to_vec();
+
+        assert_ne!(
+            start_pos_1, start_pos_2,
+            "Different seeds should produce different noise"
+        );
+
+        let (_, _) = env.reset(Some(1)).unwrap();
+        let start_pos_3 = env.env.qpos().to_vec();
+
+        let diff: f64 = start_pos_1
+            .iter()
+            .zip(start_pos_3.iter())
+            .map(|(a, b)| (a - b).abs())
+            .sum();
+
+        assert!(
+            diff < 1e-9,
+            "Same seed should produce identical starting state"
+        );
+    }
+
+    #[test]
+    fn test_observation_dimensions() {
+        let config =
+            HumanoidConfig::default().with_observation_settings(true, true, true, true, true);
+
+        let mut env = MujocoHumanoidEnv::new(Some(config)).unwrap();
+        let (obs, _) = env.reset(None).unwrap();
+
+        assert!(!obs.is_empty(), "Observation vector should not be empty");
+    }
+
+    #[test]
+    fn test_step_cycle_and_physics() {
+        let mut env = MujocoHumanoidEnv::new(None).unwrap();
+        env.reset(None).unwrap();
+
+        let action_dim = env.env.nu();
+        let action = DVector::from_element(action_dim, 0.5);
+
+        let step_res = env.step(action);
+        assert!(step_res.is_ok());
+
+        let exp = step_res.unwrap();
+
+        assert!(env.env.time() > 0.0);
+        assert_eq!(env.step_count, 1);
+
+        assert!(exp.reward.is_finite());
+
+        assert!(!exp.terminal.is_terminated());
+    }
+
+    #[test]
+    fn test_truncation() {
+        let config = HumanoidConfig::default().with_max_episode_steps(2);
+        let mut env = MujocoHumanoidEnv::new(Some(config)).unwrap();
+        env.reset(None).unwrap();
+
+        let action = DVector::zeros(env.env.nu());
+
+        let exp1 = env.step(action.clone()).unwrap();
+        assert!(!exp1.terminal.is_truncated());
+
+        let exp2 = env.step(action).unwrap();
+        assert!(
+            exp2.terminal.is_truncated(),
+            "Environment should truncate at max steps"
+        );
+    }
+
+    #[test]
+    fn test_functional_center_of_mass() {
+        let env = MujocoHumanoidEnv::new(None).unwrap();
+        let com_res = env._mass_center();
+        assert!(com_res.is_ok());
+        let com = com_res.unwrap();
+
+        assert!(com.x.abs() < 1.0);
+        assert!(com.y.abs() < 1.0);
     }
 }
