@@ -13,8 +13,8 @@ pub struct MjEnv {
 }
 
 impl MjEnv {
-    pub fn new(path: &str, frame_skip: u32) -> Result<Self, Error> {
-        let model = Model::from_xml_str(path).map_err(Error::MjInitError)?;
+    pub fn new(xml: impl AsRef<str>, frame_skip: u32) -> Result<Self, Error> {
+        let model = Model::from_xml_str(xml).map_err(Error::MjInitError)?;
         let simulation = Simulation::new(model);
         let state = State::new(&simulation.model);
 
@@ -424,10 +424,6 @@ impl MjEnv {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::File;
-    use std::io::Write;
-    use std::path::PathBuf;
-    use tempfile::tempdir;
 
     const TEST_MODEL_XML: &str = r#"
     <mujoco model="simple_test">
@@ -436,7 +432,7 @@ mod tests {
         <worldbody>
             <light pos="0 0 3" dir="0 0 -1" />
             <geom type="plane" size="10 10 0.1" rgba=".9 .9 .9 1"/>
-            <!-- Note the pos="0 0 1", this is critical for testing initialization -->
+            <!-- Slider body starting at Z=1 -->
             <body name="slider_body" pos="0 0 1">
                 <joint name="slide_x" type="slide" axis="1 0 0" />
                 <geom type="box" size="0.1 0.1 0.1" mass="1.0" />
@@ -448,63 +444,154 @@ mod tests {
     </mujoco>
     "#;
 
-    struct TestAsset {
-        _dir: tempfile::TempDir,
-        path: PathBuf,
-    }
-
-    impl TestAsset {
-        fn new() -> Self {
-            let dir = tempdir().expect("Failed to create temp dir");
-            let file_path = dir.path().join("test_model.xml");
-            let mut file = File::create(&file_path).expect("Failed to create temp xml file");
-            file.write_all(TEST_MODEL_XML.as_bytes())
-                .expect("Failed to write xml content");
-
-            Self {
-                _dir: dir,
-                path: file_path,
-            }
-        }
-
-        fn path_str(&self) -> &str {
-            self.path.to_str().expect("Path is not valid unicode")
-        }
-    }
+    const INVALID_XML: &str = "Not an XML string";
 
     #[test]
-    fn test_initialization() {
-        let asset = TestAsset::new();
+    fn test_initialization_success() {
         let frame_skip = 4;
+        let env = MjEnv::new(TEST_MODEL_XML, frame_skip);
 
-        let env = MjEnv::new(asset.path_str(), frame_skip);
         assert!(
             env.is_ok(),
-            "MjEnv should initialize successfully with valid XML"
+            "MjEnv should initialize successfully with valid XML content"
         );
 
         let env = env.unwrap();
-        assert_eq!(env.nq(), 1);
-        assert_eq!(env.nv(), 1);
-        assert_eq!(env.nu(), 1);
+
+        assert_eq!(env.nq(), 1, "Expected 1 generalized coordinate (qpos)");
+        assert_eq!(env.nv(), 1, "Expected 1 generalized velocity (qvel)");
+        assert_eq!(env.nu(), 1, "Expected 1 control input (nu)");
+
+        assert_eq!(env.nbody(), 2, "Expected 2 bodies (world + slider)");
 
         let expected_dt = 0.01 * frame_skip as f64;
         assert!(
             (env.dt() - expected_dt).abs() < 1e-6,
-            "DT should be timestep * frame_skip"
+            "DT calculation incorrect"
         );
     }
 
     #[test]
-    fn test_initial_sensors_loaded() {
-        let asset = TestAsset::new();
-        let env = MjEnv::new(asset.path_str(), 1).unwrap();
-        let pos = env.body_vector("slider_body").expect("Body should exist");
-
+    fn test_initialization_failure() {
+        let env = MjEnv::new(INVALID_XML, 1);
         assert!(
-            (pos.z - 1.0).abs() < 1e-6,
-            "Body Z position should be 1.0 from XML (Got: {})",
-            pos.z
+            env.is_err(),
+            "MjEnv should fail when initialized with invalid XML"
         );
+
+        match env {
+            Err(Error::MjInitError(_)) => (),
+            _ => panic!("Expected MjInitError"),
+        }
+    }
+
+    #[test]
+    fn test_body_lookup_and_position() {
+        let env = MjEnv::new(TEST_MODEL_XML, 1).unwrap();
+
+        let pos = env.body_vector("slider_body");
+        assert!(pos.is_some(), "Should find 'slider_body'");
+
+        let pos_vec = pos.unwrap();
+        assert!((pos_vec.x - 0.0).abs() < 1e-6);
+        assert!((pos_vec.y - 0.0).abs() < 1e-6);
+        assert!((pos_vec.z - 1.0).abs() < 1e-6);
+
+        // Lookup non-existent body
+        let missing = env.body_vector("non_existent_ghost");
+        assert!(
+            missing.is_none(),
+            "Should return None for invalid body name"
+        );
+    }
+
+    #[test]
+    fn test_set_state_and_reset() {
+        let mut env = MjEnv::new(TEST_MODEL_XML, 1).unwrap();
+
+        let new_qpos = vec![0.5];
+        let new_qvel = vec![0.1];
+
+        let res = env.set_state(&new_qpos, &new_qvel);
+        assert!(res.is_ok());
+
+        assert!((env.qpos()[0] - 0.5).abs() < 1e-6, "qpos not updated");
+        assert!((env.qvel()[0] - 0.1).abs() < 1e-6, "qvel not updated");
+
+        let bad_qpos = vec![0.5, 0.5];
+        let res_bad = env.set_state(&bad_qpos, &new_qvel);
+        assert!(res_bad.is_err(), "Should fail with wrong qpos dimensions");
+
+        let reset_res = env.reset_to_initial();
+        assert!(reset_res.is_ok());
+
+        assert!((env.qpos()[0] - 0.0).abs() < 1e-6, "qpos not reset to 0");
+        assert!((env.qvel()[0] - 0.0).abs() < 1e-6, "qvel not reset to 0");
+    }
+
+    #[test]
+    fn test_simulation_integration() {
+        let frame_skip = 1;
+        let mut env = MjEnv::new(TEST_MODEL_XML, frame_skip).unwrap();
+
+        let start_time = env.time();
+
+        let action = vec![1.0];
+
+        let step_res = env.do_simulation(&action);
+        assert!(step_res.is_ok());
+
+        let end_time = env.time();
+        assert!(
+            end_time > start_time,
+            "Time should advance after simulation step"
+        );
+        assert!(
+            (end_time - start_time - 0.01).abs() < 1e-6,
+            "Time advanced by incorrect amount"
+        );
+
+        let qvel_after = env.qvel()[0];
+        assert!(
+            qvel_after > 0.0,
+            "Applying positive motor force should result in positive velocity"
+        );
+
+        // Check that control was stored
+        assert_eq!(env.ctrl()[0], 1.0);
+    }
+
+    #[test]
+    fn test_matrix_data_access() {
+        let env = MjEnv::new(TEST_MODEL_XML, 1).unwrap();
+
+        let xpos_mat = env.xpos_matrix();
+        let (rows, cols) = xpos_mat.shape();
+
+        assert_eq!(cols, 3, "xpos matrix should have 3 columns (x,y,z)");
+        assert_eq!(rows, env.nbody(), "xpos matrix rows should match nbody");
+
+        let geom_mat = env.geom_xpos_matrix();
+        assert_eq!(geom_mat.shape().0, env.ngeom());
+        assert_eq!(geom_mat.shape().1, 3);
+
+        let cvel_mat = env.cvel_matrix();
+        assert_eq!(cvel_mat.shape().0, env.nbody());
+        assert_eq!(cvel_mat.shape().1, 6);
+    }
+
+    #[test]
+    fn test_state_vector_concatenation() {
+        let mut env = MjEnv::new(TEST_MODEL_XML, 1).unwrap();
+
+        let qpos = vec![2.0];
+        let qvel = vec![1.0];
+        let _ = env.set_state(&qpos, &qvel);
+
+        let vec_dyn = env.state_vector_dyn();
+
+        assert_eq!(vec_dyn.len(), 2);
+        assert!((vec_dyn[0] - 2.0).abs() < 1e-6);
+        assert!((vec_dyn[1] - 1.0).abs() < 1e-6);
     }
 }

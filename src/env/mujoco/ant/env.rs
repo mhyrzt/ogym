@@ -1,6 +1,6 @@
 use super::config::AntConfig;
-use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use crate::env::environment::{Environment, Experience, Terminal};
+use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use nalgebra::DVector;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::collections::HashMap;
@@ -8,59 +8,58 @@ use std::collections::HashMap;
 pub struct MujocoAntEnv {
     pub env: MjEnv,
     pub config: AntConfig,
-    pub init_qpos: Vec<f64>,
-    pub init_qvel: Vec<f64>,
+    init_qpos: Vec<f64>,
+    init_qvel: Vec<f64>,
+    steps: usize,
 }
 
 impl MujocoAntEnv {
     pub fn new(config: Option<AntConfig>) -> Result<Self, Error> {
         let config = config.unwrap_or_default();
-        let env = MjEnv::new(&config.xml_file, config.frame_skip)?;
+        let env = MjEnv::new(&config.xml, config.frame_skip)?;
+
         Ok(Self {
             init_qpos: env.init_qpos().into(),
             init_qvel: env.init_qvel().into(),
             config,
             env,
+            steps: 0,
         })
     }
 
-    // Helper methods
     fn _get_observation(&self) -> Result<DVector<f64>, Error> {
-        let mut observation = Vec::new();
+        let qpos = self.env.qpos();
+        let qvel = self.env.qvel();
 
-        let mut position = self.env.qpos().to_vec();
-        let velocity = self.env.qvel().to_vec();
+        let start_idx = if self.config.exclude_current_positions_from_observation {
+            2
+        } else {
+            0
+        };
 
-        if self.config.exclude_current_positions_from_observation {
-            // Skip first 2 elements (x, y position)
-            position = position[2..].to_vec();
-        }
+        let cfrc_len = if self.config.include_cfrc_ext_in_observation {
+            self.env.nbody() * 6
+        } else {
+            0
+        };
+        let mut obs_vec = Vec::with_capacity((qpos.len() - start_idx) + qvel.len() + cfrc_len);
 
-        observation.extend_from_slice(&position);
-        observation.extend_from_slice(&velocity);
+        obs_vec.extend_from_slice(&qpos[start_idx..]);
+        obs_vec.extend_from_slice(qvel);
 
         if self.config.include_cfrc_ext_in_observation {
-            // Add clipped contact forces (excluding first body which is usually world)
             let contact_forces = self._get_contact_forces();
-            observation.extend_from_slice(&contact_forces[3..]); // Skip first 3 values (first body)
+            obs_vec.extend(contact_forces);
         }
 
-        Ok(DVector::from_vec(observation))
+        Ok(DVector::from_vec(obs_vec))
     }
 
-    fn _get_contact_forces(&self) -> Vec<f64> {
-        let mut forces = Vec::new();
-        let cfrc_ext = self.env.cfrc_ext();
-
-        for body_forces in cfrc_ext.iter() {
-            let min_val = self.config.contact_force_range.0;
-            let max_val = self.config.contact_force_range.1;
-            for &force in body_forces.iter() {
-                forces.push(force.clamp(min_val, max_val));
-            }
-        }
-
-        forces
+    fn _get_contact_forces(&self) -> impl Iterator<Item = f64> + '_ {
+        let (min_val, max_val) = self.config.contact_force_range;
+        self.env.cfrc_ext().iter().flat_map(move |body_forces| {
+            body_forces.iter().map(move |&f| f.clamp(min_val, max_val))
+        })
     }
 
     fn _calculate_reward(
@@ -69,9 +68,17 @@ impl MujocoAntEnv {
         action: &DVector<f64>,
     ) -> Result<(f64, HashMap<String, f64>), Error> {
         let forward_reward = x_velocity * self.config.forward_reward_weight;
-        let healthy_reward = self.healthy_reward()?;
-        let ctrl_cost = self._control_cost(action)?;
-        let contact_cost = self._contact_cost()?;
+        let healthy_reward = if self.is_healthy()? {
+            self.config.healthy_reward
+        } else {
+            0.0
+        };
+
+        let ctrl_cost =
+            self.config.ctrl_cost_weight * action.iter().map(|x| x.powi(2)).sum::<f64>();
+
+        let contact_cost = self.config.contact_cost_weight
+            * self._get_contact_forces().map(|x| x.powi(2)).sum::<f64>();
 
         let total_reward = forward_reward + healthy_reward - ctrl_cost - contact_cost;
 
@@ -84,64 +91,29 @@ impl MujocoAntEnv {
         Ok((total_reward, reward_info))
     }
 
-    fn _control_cost(&self, action: &DVector<f64>) -> Result<f64, Error> {
-        let squared_actions: f64 = action.iter().map(|x| x * x).sum();
-        Ok(self.config.ctrl_cost_weight * squared_actions)
-    }
-
-    fn _contact_cost(&self) -> Result<f64, Error> {
-        let contact_forces = self._get_contact_forces();
-        let squared_forces: f64 = contact_forces.iter().map(|x| x * x).sum();
-        Ok(self.config.contact_cost_weight * squared_forces)
-    }
-
     fn is_healthy(&self) -> Result<bool, Error> {
         let state = self.env.state_vector();
-        let min_z = self.config.healthy_z_range.0;
-        let max_z = self.config.healthy_z_range.1;
-
-        let is_finite = state.iter().all(|&x| x.is_finite());
-        let z_pos = state[2]; // Third element is z position
-
+        let (min_z, max_z) = self.config.healthy_z_range;
+        let z_pos = state[2];
+        let is_finite = state.iter().all(|x| x.is_finite());
         Ok(is_finite && z_pos >= min_z && z_pos <= max_z)
     }
 
-    fn healthy_reward(&self) -> Result<f64, Error> {
-        if self.is_healthy()? {
-            Ok(self.config.healthy_reward)
-        } else {
-            Ok(0.0)
-        }
-    }
-
     fn _get_body_xpos(&self, body_id: u32) -> Result<nalgebra::Vector3<f64>, Error> {
-        // Get body position from model, with fallback to xipos
-        if (body_id as usize) < self.env.xipos().len() {
-            let pos = self.env.xipos()[body_id as usize];
+        let xipos = self.env.xipos();
+        if (body_id as usize) < xipos.len() {
+            let pos = xipos[body_id as usize];
             Ok(nalgebra::Vector3::new(pos[0], pos[1], pos[2]))
         } else {
-            // If body_id is out of bounds, return an error
             Err(Error::InvalidStateDimension {
                 field: "body_id",
-                expected: self.env.nbody(),
+                expected: xipos.len(),
                 got: body_id as usize,
             })
         }
     }
-
-    fn _get_reset_info(&self) -> Result<HashMap<String, f64>, Error> {
-        let mut info = HashMap::new();
-        info.insert("x_position".to_string(), self.env.qpos()[0]);
-        info.insert("y_position".to_string(), self.env.qpos()[1]);
-        info.insert(
-            "distance_from_origin".to_string(),
-            (self.env.qpos()[0].powi(2) + self.env.qpos()[1].powi(2)).sqrt(),
-        );
-        Ok(info)
-    }
 }
 
-// Define type aliases for clarity
 type Action = DVector<f64>;
 type State = DVector<f64>;
 type Info = HashMap<String, f64>;
@@ -152,34 +124,44 @@ impl Environment for MujocoAntEnv {
     type Info = Info;
 
     fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
+        self.steps = 0;
         self.env.reset_to_initial()?;
 
-        // Apply noise to initial state
         let mut rng = match seed {
             Some(s) => StdRng::seed_from_u64(s),
             None => StdRng::from_os_rng(),
         };
 
-        let noise_low = -self.config.reset_noise_scale;
-        let noise_high = self.config.reset_noise_scale;
+        let scale = self.config.reset_noise_scale;
+        let noise_range = -scale..scale;
 
-        // Add noise to positions
         let mut qpos = self.init_qpos.clone();
-        for i in 0..qpos.len() {
-            qpos[i] += rng.random_range(noise_low..noise_high);
-        }
+        qpos.iter_mut()
+            .for_each(|val| *val += rng.random_range(noise_range.clone()));
 
-        // Add noise to velocities
         let mut qvel = self.init_qvel.clone();
-        for i in 0..qvel.len() {
-            qvel[i] += self.config.reset_noise_scale * rng.random::<f64>() * 2.0
-                - self.config.reset_noise_scale; // Standard normal would be more complex
-        }
+        qvel.iter_mut().for_each(|val| {
+            *val += scale * rng.random::<f64>() * 2.0 - scale;
+        });
 
         self.env.set_state(&qpos, &qvel)?;
 
+        unsafe {
+            mujoco_rs_sys::no_render::mj_forward(
+                self.env.model().ptr(),
+                self.env.state_mut().ptr(),
+            );
+        }
+
         let observation = self._get_observation()?;
-        let info = self._get_reset_info()?;
+
+        let mut info = HashMap::new();
+        info.insert("x_position".to_string(), self.env.qpos()[0]);
+        info.insert("y_position".to_string(), self.env.qpos()[1]);
+        info.insert(
+            "distance_from_origin".to_string(),
+            self.env.qpos()[0].hypot(self.env.qpos()[1]),
+        );
 
         Ok((observation, info))
     }
@@ -188,63 +170,125 @@ impl Environment for MujocoAntEnv {
         &mut self,
         action: Self::Action,
     ) -> Result<Experience<Self::State, Self::Info, Self::Action>, Error> {
-        // Store current state
+        self.steps += 1;
+
         let curr_state = self.state()?;
+        let pos_before = self.env.qpos().to_vec();
 
-        // Get position before simulation
-        let xy_pos_before = self._get_body_xpos(self.config.main_body)?;
-
-        // Apply action and simulate
         self.env.do_simulation(action.as_slice())?;
 
-        // Get position after simulation
-        let xy_pos_after = self._get_body_xpos(self.config.main_body)?;
-
-        // Calculate velocities
+        let pos_after = self.env.qpos();
         let dt = self.env.dt();
-        let xy_velocity = (xy_pos_after - xy_pos_before) / dt;
-        let x_velocity = xy_velocity[0];
+        let x_velocity = (pos_after[0] - pos_before[0]) / dt;
+        let y_velocity = (pos_after[1] - pos_before[1]) / dt;
 
-        // Get new observation
         let next_state = self._get_observation()?;
-
-        // Calculate reward
         let (reward, reward_info) = self._calculate_reward(x_velocity, &action)?;
 
-        // Determine termination
-        let terminated = (!self.is_healthy()?) && self.config.terminate_when_unhealthy;
-        let truncated = self.env.time() > 1000.0; // Common truncation condition
+        let is_healthy = self.is_healthy()?;
+        let terminated = self.config.terminate_when_unhealthy && !is_healthy;
+        let truncated = self.steps >= self.config.max_episode_steps;
 
-        // Create info dict
         let mut info = HashMap::new();
-        info.insert("x_position".to_string(), self.env.qpos()[0]);
-        info.insert("y_position".to_string(), self.env.qpos()[1]);
+        info.insert("x_position".to_string(), pos_after[0]);
+        info.insert("y_position".to_string(), pos_after[1]);
         info.insert(
             "distance_from_origin".to_string(),
-            (self.env.qpos()[0].powi(2) + self.env.qpos()[1].powi(2)).sqrt(),
+            pos_after[0].hypot(pos_after[1]),
         );
         info.insert("x_velocity".to_string(), x_velocity);
-        info.insert("y_velocity".to_string(), xy_velocity[1]);
+        info.insert("y_velocity".to_string(), y_velocity);
         info.extend(reward_info);
 
         let terminal = Terminal::from_flags(terminated, truncated);
 
         Ok(Experience::new(
-            curr_state, reward, action, next_state, info, terminal,
-            0, // Step counter would need to be tracked separately
+            curr_state, reward, action, next_state, info, terminal, 0,
         ))
     }
 
     fn is_terminal(&self) -> Result<bool, Error> {
-        Ok((!self.is_healthy()?) && self.config.terminate_when_unhealthy)
+        Ok(self.config.terminate_when_unhealthy && !self.is_healthy()?)
     }
 
     fn is_truncated(&self) -> bool {
-        // For now, using a simple time-based truncation
-        self.env.time() > 1000.0
+        self.steps >= self.config.max_episode_steps
     }
 
     fn state(&self) -> Result<Self::State, Error> {
         self._get_observation()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_XML: &str = r#"
+    <mujoco model="ant_test_minimal">
+        <compiler angle="radian"/>
+        <option timestep="0.01" gravity="0 0 -9.81"/>
+        <worldbody>
+            <geom type="plane" size="10 10 0.1"/>
+            <body name="torso" pos="0 0 0.75">
+                <joint name="root" type="free"/>
+                <geom type="sphere" size="0.25" mass="1"/>
+            </body>
+        </worldbody>
+        <actuator>
+            <motor name="motor_1" joint="root" gear="1"/> 
+        </actuator>
+    </mujoco>
+    "#;
+
+    #[test]
+    fn test_builder_methods_compile() {
+        let config = AntConfig::new()
+            .with_include_cfrc_ext_in_observation(true)
+            .with_exclude_current_positions_from_observation(false);
+
+        assert!(config.include_cfrc_ext_in_observation);
+        assert!(!config.exclude_current_positions_from_observation);
+    }
+
+    #[test]
+    fn test_env_with_mock_xml() {
+        let config = AntConfig::new()
+            .with_xml(TEST_XML)
+            .with_include_cfrc_ext_in_observation(false)
+            .with_exclude_current_positions_from_observation(false);
+
+        let env = MujocoAntEnv::new(Some(config)).unwrap();
+
+        assert_eq!(env.env.nq(), 7);
+        assert_eq!(env.env.nv(), 6);
+    }
+
+    #[test]
+    fn test_env_with_real_default_xml() {
+        let config = AntConfig::default(); // Load real model
+        let env_res = MujocoAntEnv::new(Some(config));
+        assert!(
+            env_res.is_ok(),
+            "Should load the default include_str! model successfully"
+        );
+
+        if let Ok(env) = env_res {
+            assert!(env.env.nq() > 0);
+            assert!(env.env.dt() > 0.0);
+        }
+    }
+
+    #[test]
+    fn test_step_cycle() {
+        let config = AntConfig::new().with_xml(TEST_XML);
+        let mut env = MujocoAntEnv::new(Some(config)).unwrap();
+        env.reset(None).unwrap();
+
+        let action = DVector::zeros(env.env.nu());
+        let exp = env.step(action).unwrap();
+
+        assert!(!exp.next_state.is_empty());
+        assert!(exp.reward.is_finite());
     }
 }
