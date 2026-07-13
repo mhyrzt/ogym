@@ -7,6 +7,7 @@ pub struct SwimmerConfig {
     pub ctrl_cost_weight: f64,
     pub reset_noise_scale: f64,
     pub exclude_current_positions_from_observation: bool,
+    pub max_episode_steps: usize,
 }
 
 impl Default for SwimmerConfig {
@@ -18,6 +19,7 @@ impl Default for SwimmerConfig {
             ctrl_cost_weight: 1e-4,
             reset_noise_scale: 0.1,
             exclude_current_positions_from_observation: true,
+            max_episode_steps: 1000,
         }
     }
 }

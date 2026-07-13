@@ -10,6 +10,7 @@ pub struct MujocoSwimmerEnv {
     pub config: SwimmerConfig,
     pub init_qpos: Vec<f64>,
     pub init_qvel: Vec<f64>,
+    steps: usize,
 }
 
 impl MujocoSwimmerEnv {
@@ -21,6 +22,7 @@ impl MujocoSwimmerEnv {
             init_qvel: env.init_qvel().into(),
             config,
             env,
+            steps: 0,
         })
     }
 
@@ -72,6 +74,7 @@ impl Environment for MujocoSwimmerEnv {
     type Info = Info;
 
     fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
+        self.steps = 0;
         self.env.reset_to_initial()?;
 
         // Apply noise to initial state
@@ -85,14 +88,18 @@ impl Environment for MujocoSwimmerEnv {
 
         // Add noise to positions
         let mut qpos = self.init_qpos.clone();
-        for i in 0..qpos.len() {
-            qpos[i] += rng.random_range(noise_low..noise_high);
+        if noise_high > noise_low {
+            for i in 0..qpos.len() {
+                qpos[i] += rng.random_range(noise_low..noise_high);
+            }
         }
 
         // Add noise to velocities
         let mut qvel = self.init_qvel.clone();
-        for i in 0..qvel.len() {
-            qvel[i] += rng.random_range(noise_low..noise_high);
+        if noise_high > noise_low {
+            for i in 0..qvel.len() {
+                qvel[i] += rng.random_range(noise_low..noise_high);
+            }
         }
 
         self.env.set_state(&qpos, &qvel)?;
@@ -115,6 +122,7 @@ impl Environment for MujocoSwimmerEnv {
 
         // Apply action and simulate
         self.env.do_simulation(action.as_slice())?;
+        self.steps += 1;
 
         // Get position after simulation
         let x_position_after = self.env.qpos()[0];
@@ -131,7 +139,7 @@ impl Environment for MujocoSwimmerEnv {
 
         // Swimmer doesn't terminate based on health
         let terminated = false;
-        let truncated = self.env.time() > 1000.0; // Time-based truncation
+        let truncated = self.steps >= self.config.max_episode_steps;
 
         // Create info dict
         let mut info = HashMap::new();
@@ -147,8 +155,13 @@ impl Environment for MujocoSwimmerEnv {
         let terminal = Terminal::from_flags(terminated, truncated);
 
         Ok(Experience::new(
-            curr_state, reward, action, next_state, info, terminal,
-            0, // Step counter would need to be tracked separately
+            curr_state,
+            reward,
+            action,
+            next_state,
+            info,
+            terminal,
+            self.steps as u32,
         ))
     }
 
@@ -158,11 +171,44 @@ impl Environment for MujocoSwimmerEnv {
     }
 
     fn is_truncated(&self) -> bool {
-        // Time-based truncation
-        self.env.time() > 1000.0
+        self.steps >= self.config.max_episode_steps
     }
 
     fn state(&self) -> Result<Self::State, Error> {
         self._get_obs()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reset_with_zero_noise_scale_does_not_panic() {
+        let config = SwimmerConfig {
+            reset_noise_scale: 0.0,
+            ..SwimmerConfig::default()
+        };
+        let mut env = MujocoSwimmerEnv::new(Some(config)).unwrap();
+        assert!(env.reset(None).is_ok());
+    }
+
+    #[test]
+    fn test_truncation_at_max_episode_steps() {
+        let config = SwimmerConfig {
+            max_episode_steps: 5,
+            ..SwimmerConfig::default()
+        };
+        let mut env = MujocoSwimmerEnv::new(Some(config)).unwrap();
+        env.reset(None).unwrap();
+
+        let action = DVector::zeros(env.env.nu());
+        for _ in 0..4 {
+            let exp = env.step(action.clone()).unwrap();
+            assert!(!exp.terminal.is_truncated());
+        }
+        let exp = env.step(action).unwrap();
+        assert!(exp.terminal.is_truncated());
+        assert!(env.is_truncated());
     }
 }

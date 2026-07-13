@@ -10,6 +10,7 @@ pub struct MujocoHumanoidStandupEnv {
     pub config: HumanoidStandupConfig,
     pub init_qpos: Vec<f64>,
     pub init_qvel: Vec<f64>,
+    steps: usize,
 }
 
 impl MujocoHumanoidStandupEnv {
@@ -21,6 +22,7 @@ impl MujocoHumanoidStandupEnv {
             init_qvel: env.init_qvel().into(),
             config,
             env,
+            steps: 0,
         })
     }
 
@@ -170,6 +172,7 @@ impl Environment for MujocoHumanoidStandupEnv {
     type Info = Info;
 
     fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
+        self.steps = 0;
         self.env.reset_to_initial()?;
 
         // Apply noise to initial state
@@ -183,14 +186,18 @@ impl Environment for MujocoHumanoidStandupEnv {
 
         // Add noise to positions
         let mut qpos = self.init_qpos.clone();
-        for i in 0..qpos.len() {
-            qpos[i] += rng.random_range(noise_low..noise_high);
+        if noise_high > noise_low {
+            for i in 0..qpos.len() {
+                qpos[i] += rng.random_range(noise_low..noise_high);
+            }
         }
 
         // Add noise to velocities
         let mut qvel = self.init_qvel.clone();
-        for i in 0..qvel.len() {
-            qvel[i] += rng.random_range(noise_low..noise_high);
+        if noise_high > noise_low {
+            for i in 0..qvel.len() {
+                qvel[i] += rng.random_range(noise_low..noise_high);
+            }
         }
 
         self.env.set_state(&qpos, &qvel)?;
@@ -210,6 +217,7 @@ impl Environment for MujocoHumanoidStandupEnv {
 
         // Apply action and simulate
         self.env.do_simulation(action.as_slice())?;
+        self.steps += 1;
 
         // Get new observation
         let next_state = self._get_obs()?;
@@ -219,7 +227,7 @@ impl Environment for MujocoHumanoidStandupEnv {
 
         // For humanoid standup, no termination (it's a standup task)
         let terminated = false;
-        let truncated = self.env.time() > 1000.0; // Time-based truncation
+        let truncated = self.steps >= self.config.max_episode_steps;
 
         // Create info dict
         let mut info = HashMap::new();
@@ -242,8 +250,13 @@ impl Environment for MujocoHumanoidStandupEnv {
         let terminal = Terminal::from_flags(terminated, truncated);
 
         Ok(Experience::new(
-            curr_state, reward, action, next_state, info, terminal,
-            0, // Step counter would need to be tracked separately
+            curr_state,
+            reward,
+            action,
+            next_state,
+            info,
+            terminal,
+            self.steps as u32,
         ))
     }
 
@@ -253,11 +266,44 @@ impl Environment for MujocoHumanoidStandupEnv {
     }
 
     fn is_truncated(&self) -> bool {
-        // Time-based truncation
-        self.env.time() > 1000.0
+        self.steps >= self.config.max_episode_steps
     }
 
     fn state(&self) -> Result<Self::State, Error> {
         self._get_obs()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reset_with_zero_noise_scale_does_not_panic() {
+        let config = HumanoidStandupConfig {
+            reset_noise_scale: 0.0,
+            ..HumanoidStandupConfig::default()
+        };
+        let mut env = MujocoHumanoidStandupEnv::new(Some(config)).unwrap();
+        assert!(env.reset(None).is_ok());
+    }
+
+    #[test]
+    fn test_truncation_at_max_episode_steps() {
+        let config = HumanoidStandupConfig {
+            max_episode_steps: 5,
+            ..HumanoidStandupConfig::default()
+        };
+        let mut env = MujocoHumanoidStandupEnv::new(Some(config)).unwrap();
+        env.reset(None).unwrap();
+
+        let action = DVector::zeros(env.env.nu());
+        for _ in 0..4 {
+            let exp = env.step(action.clone()).unwrap();
+            assert!(!exp.terminal.is_truncated());
+        }
+        let exp = env.step(action).unwrap();
+        assert!(exp.terminal.is_truncated());
+        assert!(env.is_truncated());
     }
 }

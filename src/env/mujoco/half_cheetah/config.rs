@@ -6,6 +6,7 @@ pub struct HalfCheetahConfig {
     ctrl_cost_weight: f64,
     reset_noise_scale: f64,
     exclude_current_positions_from_observation: bool,
+    max_episode_steps: usize,
 }
 
 impl Default for HalfCheetahConfig {
@@ -17,6 +18,7 @@ impl Default for HalfCheetahConfig {
             ctrl_cost_weight: 0.1,
             reset_noise_scale: 0.1,
             exclude_current_positions_from_observation: true,
+            max_episode_steps: 1000,
         }
     }
 }
@@ -58,6 +60,11 @@ impl HalfCheetahConfig {
         self
     }
 
+    pub fn with_max_episode_steps(mut self, steps: usize) -> Self {
+        self.max_episode_steps = steps;
+        self
+    }
+
     pub fn xml(&self) -> &str {
         &self.xml
     }
@@ -80,6 +87,10 @@ impl HalfCheetahConfig {
 
     pub fn exclude_current_positions_from_observation(&self) -> bool {
         self.exclude_current_positions_from_observation
+    }
+
+    pub fn max_episode_steps(&self) -> usize {
+        self.max_episode_steps
     }
 }
 

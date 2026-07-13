@@ -11,6 +11,7 @@ pub struct HopperConfig {
     pub healthy_angle_range: (f64, f64),
     pub reset_noise_scale: f64,
     pub exclude_current_positions_from_observation: bool,
+    pub max_episode_steps: usize,
 }
 
 impl Default for HopperConfig {
@@ -27,6 +28,7 @@ impl Default for HopperConfig {
             healthy_angle_range: (-0.2, 0.2),
             reset_noise_scale: 5e-3,
             exclude_current_positions_from_observation: true,
+            max_episode_steps: 1000,
         }
     }
 }

@@ -10,6 +10,7 @@ pub struct Walker2dConfig {
     pub healthy_angle_range: (f64, f64),
     pub reset_noise_scale: f64,
     pub exclude_current_positions_from_observation: bool,
+    pub max_episode_steps: usize,
 }
 
 impl Default for Walker2dConfig {
@@ -25,6 +26,7 @@ impl Default for Walker2dConfig {
             healthy_angle_range: (-1.0, 1.0),
             reset_noise_scale: 5e-3,
             exclude_current_positions_from_observation: true,
+            max_episode_steps: 1000,
         }
     }
 }

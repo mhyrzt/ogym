@@ -7,6 +7,7 @@ pub struct InvertedPendulumConfig {
     pub observation_low: f64,
     pub observation_high: f64,
     pub default_camera_config: std::collections::HashMap<String, f64>,
+    pub max_episode_steps: usize,
 }
 
 impl Default for InvertedPendulumConfig {
@@ -23,6 +24,7 @@ impl Default for InvertedPendulumConfig {
             observation_low: f64::NEG_INFINITY,
             observation_high: f64::INFINITY,
             default_camera_config,
+            max_episode_steps: 1000,
         }
     }
 }

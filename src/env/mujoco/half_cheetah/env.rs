@@ -140,7 +140,7 @@ impl Environment for MujocoHalfCheetahEnv {
         let next_state = self._get_observation()?;
 
         let terminated = false;
-        let truncated = self.env.time() > 1000.0;
+        let truncated = self.step_count >= self.config.max_episode_steps();
 
         info.insert("x_position".to_string(), x_pos_after);
         info.insert("x_velocity".to_string(), x_velocity);
@@ -163,7 +163,7 @@ impl Environment for MujocoHalfCheetahEnv {
     }
 
     fn is_truncated(&self) -> bool {
-        self.env.time() > 1000.0
+        self.step_count >= self.config.max_episode_steps()
     }
 
     fn state(&self) -> Result<Self::State, Error> {
@@ -268,6 +268,22 @@ mod tests {
 
         assert_relative_eq!(experience.reward, expected_reward, epsilon = 1e-6);
         assert!(!experience.terminal.is_terminated());
+    }
+
+    #[test]
+    fn test_truncation_at_max_episode_steps() {
+        let config = get_test_config().with_max_episode_steps(5);
+        let mut env = MujocoHalfCheetahEnv::new(Some(config)).unwrap();
+        env.reset(None).unwrap();
+
+        let action = DVector::from_vec(vec![0.0]);
+        for _ in 0..4 {
+            let exp = env.step(action.clone()).unwrap();
+            assert!(!exp.terminal.is_truncated());
+        }
+        let exp = env.step(action).unwrap();
+        assert!(exp.terminal.is_truncated());
+        assert!(env.is_truncated());
     }
 
     #[test]

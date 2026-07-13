@@ -10,6 +10,7 @@ pub struct MujocoWalker2dEnv {
     pub config: Walker2dConfig,
     pub init_qpos: Vec<f64>,
     pub init_qvel: Vec<f64>,
+    steps: usize,
 }
 
 impl MujocoWalker2dEnv {
@@ -21,6 +22,7 @@ impl MujocoWalker2dEnv {
             init_qvel: env.init_qvel().into(),
             config,
             env,
+            steps: 0,
         })
     }
 
@@ -93,6 +95,7 @@ impl Environment for MujocoWalker2dEnv {
     type Info = Info;
 
     fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
+        self.steps = 0;
         self.env.reset_to_initial()?;
 
         let mut rng = match seed {
@@ -104,13 +107,17 @@ impl Environment for MujocoWalker2dEnv {
         let noise_high = self.config.reset_noise_scale;
 
         let mut qpos = self.init_qpos.clone();
-        for i in 0..qpos.len() {
-            qpos[i] += rng.random_range(noise_low..noise_high);
+        if noise_high > noise_low {
+            for i in 0..qpos.len() {
+                qpos[i] += rng.random_range(noise_low..noise_high);
+            }
         }
 
         let mut qvel = self.init_qvel.clone();
-        for i in 0..qvel.len() {
-            qvel[i] += rng.random_range(noise_low..noise_high);
+        if noise_high > noise_low {
+            for i in 0..qvel.len() {
+                qvel[i] += rng.random_range(noise_low..noise_high);
+            }
         }
 
         self.env.set_state(&qpos, &qvel)?;
@@ -130,6 +137,7 @@ impl Environment for MujocoWalker2dEnv {
         let x_position_before = self.env.qpos()[0];
 
         self.env.do_simulation(action.as_slice())?;
+        self.steps += 1;
 
         let x_position_after = self.env.qpos()[0];
 
@@ -141,7 +149,7 @@ impl Environment for MujocoWalker2dEnv {
         let reward = self._get_rew(x_velocity, &action)?;
 
         let terminated = (!self.is_healthy()?) && self.config.terminate_when_unhealthy;
-        let truncated = self.env.time() > 1000.0; // Common truncation condition
+        let truncated = self.steps >= self.config.max_episode_steps;
 
         let mut info = HashMap::new();
         info.insert("x_position".to_string(), x_position_after);
@@ -169,7 +177,13 @@ impl Environment for MujocoWalker2dEnv {
         let terminal = Terminal::from_flags(terminated, truncated);
 
         Ok(Experience::new(
-            curr_state, reward, action, next_state, info, terminal, 0,
+            curr_state,
+            reward,
+            action,
+            next_state,
+            info,
+            terminal,
+            self.steps as u32,
         ))
     }
 
@@ -178,10 +192,44 @@ impl Environment for MujocoWalker2dEnv {
     }
 
     fn is_truncated(&self) -> bool {
-        self.env.time() > 1000.0
+        self.steps >= self.config.max_episode_steps
     }
 
     fn state(&self) -> Result<Self::State, Error> {
         self._get_obs()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reset_with_zero_noise_scale_does_not_panic() {
+        let config = Walker2dConfig {
+            reset_noise_scale: 0.0,
+            ..Walker2dConfig::default()
+        };
+        let mut env = MujocoWalker2dEnv::new(Some(config)).unwrap();
+        assert!(env.reset(None).is_ok());
+    }
+
+    #[test]
+    fn test_truncation_at_max_episode_steps() {
+        let config = Walker2dConfig {
+            max_episode_steps: 5,
+            ..Walker2dConfig::default()
+        };
+        let mut env = MujocoWalker2dEnv::new(Some(config)).unwrap();
+        env.reset(None).unwrap();
+
+        let action = DVector::zeros(env.env.nu());
+        for _ in 0..4 {
+            let exp = env.step(action.clone()).unwrap();
+            assert!(!exp.terminal.is_truncated());
+        }
+        let exp = env.step(action).unwrap();
+        assert!(exp.terminal.is_truncated());
+        assert!(env.is_truncated());
     }
 }

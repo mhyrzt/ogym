@@ -13,6 +13,7 @@ pub struct HumanoidStandupConfig {
     pub include_cvel_in_observation: bool,
     pub include_qfrc_actuator_in_observation: bool,
     pub include_cfrc_ext_in_observation: bool,
+    pub max_episode_steps: usize,
 }
 
 impl Default for HumanoidStandupConfig {
@@ -30,6 +31,7 @@ impl Default for HumanoidStandupConfig {
             include_cvel_in_observation: true,
             include_qfrc_actuator_in_observation: true,
             include_cfrc_ext_in_observation: true,
+            max_episode_steps: 1000,
         }
     }
 }
