@@ -197,6 +197,7 @@ impl TerrainGenerator {
 
             let collider = ColliderBuilder::segment(p1, p2)
                 .friction(self.config.friction)
+                .active_events(ActiveEvents::COLLISION_EVENTS)
                 .collision_groups(InteractionGroups::new(Group::GROUP_1, Group::ALL))
                 .build();
             collider_set.insert_with_parent(collider, handle, rigid_body_set);
@@ -223,6 +224,7 @@ impl TerrainGenerator {
         let collider = ColliderBuilder::convex_hull(&points)
             .unwrap()
             .friction(self.config.friction)
+            .active_events(ActiveEvents::COLLISION_EVENTS)
             .build();
         collider_set.insert_with_parent(collider, handle, rigid_body_set);
 
