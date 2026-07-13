@@ -8,7 +8,8 @@ use crate::{
     spaces::{Boxed, EnvSpace, Mixed, MixedItem},
 };
 use nalgebra::{point, Isometry2, SVector, Vector2};
-use rand::Rng;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use rapier2d::prelude::{
     ColliderBuilder, ColliderHandle, CollisionEvent, InteractionGroups, RevoluteJointBuilder,
     RigidBodyBuilder, RigidBodyHandle, RigidBodyType,
@@ -39,6 +40,7 @@ pub struct LunarLander {
     prev_shaping: Option<f32>,
     wind_idx: f32,
     torque_idx: f32,
+    rng: StdRng,
 }
 
 impl LunarLander {
@@ -66,6 +68,7 @@ impl LunarLander {
             crash: false,
             wind_idx: 0.0,
             torque_idx: 0.0,
+            rng: StdRng::seed_from_u64(10),
         };
 
         lunar_lander.reset(None)?;
@@ -106,10 +109,9 @@ impl LunarLander {
             &mut self.world.rigid_body_set,
         );
 
-        let mut rng = rand::rng();
         let force = self.config.initial_random;
-        let force_x = rng.random_range(-force..force) as f32;
-        let force_y = rng.random_range(-force..force) as f32;
+        let force_x = self.rng.random_range(-force..force) as f32;
+        let force_y = self.rng.random_range(-force..force) as f32;
 
         if let Some(body) = self.world.rigid_body_set.get_mut(lander_handle) {
             body.apply_impulse(Vector2::new(force_x, force_y), true);
@@ -174,7 +176,6 @@ impl LunarLander {
     }
 
     fn apply_engine_forces(&mut self, action: &Action) -> (f32, f32) {
-        let mut rng = rand::rng();
         let mut main_force = 0.0;
         let mut side_force = 0.0;
 
@@ -188,8 +189,8 @@ impl LunarLander {
         let tip = (angle.sin(), angle.cos());
         let side = (-tip.1, tip.0);
         let dispersion = [
-            rng.random_range(-1.0..1.0) / self.config.scale,
-            rng.random_range(-1.0..1.0) / self.config.scale,
+            self.rng.random_range(-1.0..1.0) / self.config.scale,
+            self.rng.random_range(-1.0..1.0) / self.config.scale,
         ];
 
         let main_engine_active = match action {
@@ -408,7 +409,10 @@ impl Environment for LunarLander {
     type State = State;
     type Info = ();
 
-    fn reset(&mut self, _seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
+    fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
+        if let Some(s) = seed {
+            self.rng = StdRng::seed_from_u64(s);
+        }
         self.world = PhysicsWorld::new(self.config.gravity);
         self.t = 0;
         self.helipad = Helipad::default();
@@ -474,8 +478,10 @@ impl Environment for LunarLander {
     }
 
     fn is_terminal(&self) -> Result<bool, Error> {
-        if let Some(state) = &self.state {
-            Ok(state[0].abs() >= 1.0)
+        if self.state.is_some() {
+            // Matches step()'s terminated computation: crash/out-of-screen or a
+            // successful landing, not just out-of-screen.
+            Ok(self.is_game_over() || self.is_landed())
         } else {
             Err(environment::Error::NotInitialized)
         }
@@ -744,5 +750,63 @@ mod tests {
         assert_eq!(env.wind_idx, 0.0);
         env.step(MixedItem::Discrete(0)).unwrap();
         assert_eq!(env.wind_idx, 1.0);
+    }
+
+    #[test]
+    fn test_seeded_reset_is_reproducible() {
+        // Both the initial random impulse (create_lander) and the per-step
+        // engine dispersion (apply_engine_forces) draw from self.rng, so a
+        // seeded reset should make the whole rollout deterministic.
+        let config = get_test_config();
+        let mut env1 = LunarLander::new(config).unwrap();
+        let mut env2 = LunarLander::new(config).unwrap();
+
+        let (state1, _) = env1.reset(Some(42)).unwrap();
+        let (state2, _) = env2.reset(Some(42)).unwrap();
+        assert_eq!(state1, state2);
+
+        for _ in 0..10 {
+            let exp1 = env1.step(MixedItem::Discrete(0)).unwrap();
+            let exp2 = env2.step(MixedItem::Discrete(0)).unwrap();
+            assert_eq!(exp1.next_state, exp2.next_state);
+        }
+
+        let (state3, _) = env1.reset(Some(7)).unwrap();
+        assert_ne!(
+            state3, state1,
+            "a different seed should produce a different initial impulse"
+        );
+    }
+
+    #[test]
+    fn test_is_terminal_matches_step_terminated_on_crash() {
+        let config = get_test_config();
+        let mut env = LunarLander::new(config).unwrap();
+        env.reset(Some(1)).unwrap();
+
+        // Simulate a crash the way handle_collisions() would set it, without
+        // needing to force an actual physics collision.
+        env.crash = true;
+
+        // is_terminal() must reflect the crash, not just out-of-screen.
+        assert!(env.is_terminal().unwrap());
+    }
+
+    #[test]
+    fn test_is_terminal_matches_step_terminated_on_landing() {
+        let config = get_test_config();
+        let mut env = LunarLander::new(config).unwrap();
+        env.reset(Some(1)).unwrap();
+
+        // Force a "landed" condition: both legs on the ground, lander at rest.
+        if let Some(body) = env.world.rigid_body_set.get_mut(env.lander) {
+            body.set_linvel(Vector2::new(0.0, 0.0), true);
+            body.set_angvel(0.0, true);
+        }
+        env.legs[0].ground_contact = true;
+        env.legs[1].ground_contact = true;
+
+        assert!(env.is_landed());
+        assert!(env.is_terminal().unwrap());
     }
 }
