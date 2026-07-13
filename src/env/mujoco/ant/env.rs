@@ -136,8 +136,10 @@ impl Environment for MujocoAntEnv {
         let noise_range = -scale..scale;
 
         let mut qpos = self.init_qpos.clone();
-        qpos.iter_mut()
-            .for_each(|val| *val += rng.random_range(noise_range.clone()));
+        if scale > 0.0 {
+            qpos.iter_mut()
+                .for_each(|val| *val += rng.random_range(noise_range.clone()));
+        }
 
         let mut qvel = self.init_qvel.clone();
         qvel.iter_mut().for_each(|val| {
@@ -277,6 +279,15 @@ mod tests {
             assert!(env.env.nq() > 0);
             assert!(env.env.dt() > 0.0);
         }
+    }
+
+    #[test]
+    fn test_reset_with_zero_noise_scale_does_not_panic() {
+        let config = AntConfig::new()
+            .with_xml(TEST_XML)
+            .with_reset_noise_scale(0.0);
+        let mut env = MujocoAntEnv::new(Some(config)).unwrap();
+        assert!(env.reset(None).is_ok());
     }
 
     #[test]
