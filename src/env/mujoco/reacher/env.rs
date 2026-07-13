@@ -10,6 +10,7 @@ pub struct MujocoReacherEnv {
     pub config: ReacherConfig,
     pub init_qpos: Vec<f64>,
     pub init_qvel: Vec<f64>,
+    steps: usize,
 }
 
 impl MujocoReacherEnv {
@@ -21,27 +22,31 @@ impl MujocoReacherEnv {
             init_qvel: env.init_qvel().into(),
             config,
             env,
+            steps: 0,
         })
     }
 
     // Helper methods
     fn _get_obs(&self) -> Result<DVector<f64>, Error> {
+        // Matches Gymnasium's Reacher-v4 exactly: cos/sin of the two arm
+        // joint angles (not the raw angles), the target's own joint
+        // position, the arm's joint velocities only (not the target's), and
+        // the 3D fingertip-to-target vector (not raw absolute positions).
+        let theta = &self.env.qpos()[0..2];
+
         let mut observation = Vec::new();
+        observation.push(theta[0].cos());
+        observation.push(theta[1].cos());
+        observation.push(theta[0].sin());
+        observation.push(theta[1].sin());
+        observation.extend_from_slice(&self.env.qpos()[2..4]);
+        observation.extend_from_slice(&self.env.qvel()[0..2]);
 
-        // Position (joint angles)
-        observation.extend_from_slice(self.env.qpos());
-
-        // Velocity (joint velocities)
-        observation.extend_from_slice(self.env.qvel());
-
-        // Get target position (assuming it's stored somehow in the model)
-        // This is simplified - in real implementation, we'd look up target position
-        let target_pos = self._get_target_pos()?;
-        observation.extend_from_slice(&[target_pos[0], target_pos[1]]);
-
-        // Get fingertip position
         let fingertip_pos = self._get_fingertip_pos()?;
-        observation.extend_from_slice(&[fingertip_pos[0], fingertip_pos[1]]);
+        let target_pos = self._get_target_pos()?;
+        observation.push(fingertip_pos[0] - target_pos[0]);
+        observation.push(fingertip_pos[1] - target_pos[1]);
+        observation.push(fingertip_pos[2] - target_pos[2]);
 
         Ok(DVector::from_vec(observation))
     }
@@ -50,15 +55,9 @@ impl MujocoReacherEnv {
         &self,
         action: &DVector<f64>,
     ) -> Result<(f64, HashMap<String, f64>), Error> {
-        // Calculate distance to target
         let target_pos = self._get_target_pos()?;
         let fingertip_pos = self._get_fingertip_pos()?;
-
-        let dist_vec = nalgebra::Vector2::new(
-            target_pos[0] - fingertip_pos[0],
-            target_pos[1] - fingertip_pos[1],
-        );
-        let dist = dist_vec.norm();
+        let dist = (fingertip_pos - target_pos).norm();
 
         let reward_dist = -self.config.reward_dist_weight * dist;
         let reward_ctrl = -self.config.reward_control_weight * action.norm_squared();
@@ -72,30 +71,16 @@ impl MujocoReacherEnv {
         Ok((total_reward, reward_info))
     }
 
-    fn _get_target_pos(&self) -> Result<nalgebra::Vector2<f64>, Error> {
-        // Get target body position
-        // In a real implementation, we'd find the target body by name and get its position
-        // For now, returning a default value
-        if self.env.nbody() > 1 && self.env.xipos().len() > 1 {
-            // Assuming target body is the second one (index 1)
-            let target_data = self.env.xipos()[1];
-            Ok(nalgebra::Vector2::new(target_data[0], target_data[1]))
-        } else {
-            Ok(nalgebra::Vector2::new(0.0, 0.0))
-        }
+    fn _get_target_pos(&self) -> Result<nalgebra::Vector3<f64>, Error> {
+        self.env
+            .body_com_vector("target")
+            .ok_or_else(|| Error::MjInitError("body 'target' not found in model".to_string()))
     }
 
-    fn _get_fingertip_pos(&self) -> Result<nalgebra::Vector2<f64>, Error> {
-        // Get fingertip body position
-        // In a real implementation, we'd find the fingertip body by name and get its position
-        // For now, returning a default value - in the actual model, fingertip would be a specific body
-        if self.env.nbody() > 2 && self.env.xipos().len() > 2 {
-            // Assuming fingertip body is the third one (index 2) for example
-            let fingertip_data = self.env.xipos()[2];
-            Ok(nalgebra::Vector2::new(fingertip_data[0], fingertip_data[1]))
-        } else {
-            Ok(nalgebra::Vector2::new(0.0, 0.0))
-        }
+    fn _get_fingertip_pos(&self) -> Result<nalgebra::Vector3<f64>, Error> {
+        self.env
+            .body_com_vector("fingertip")
+            .ok_or_else(|| Error::MjInitError("body 'fingertip' not found in model".to_string()))
     }
 
     fn _get_reset_info(&self) -> Result<HashMap<String, f64>, Error> {
@@ -114,6 +99,7 @@ impl Environment for MujocoReacherEnv {
     type Info = Info;
 
     fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
+        self.steps = 0;
         self.env.reset_to_initial()?;
 
         // Apply noise to initial state
@@ -156,6 +142,7 @@ impl Environment for MujocoReacherEnv {
 
         // Apply action and simulate
         self.env.do_simulation(action.as_slice())?;
+        self.steps += 1;
 
         // Get new observation
         let next_state = self._get_obs()?;
@@ -165,7 +152,7 @@ impl Environment for MujocoReacherEnv {
 
         // For reacher, no termination based on health
         let terminated = false;
-        let truncated = self.env.time() > 1000.0; // Time-based truncation
+        let truncated = self.steps >= self.config.max_episode_steps;
 
         // Create info dict
         let mut info = HashMap::new();
@@ -174,8 +161,13 @@ impl Environment for MujocoReacherEnv {
         let terminal = Terminal::from_flags(terminated, truncated);
 
         Ok(Experience::new(
-            curr_state, reward, action, next_state, info, terminal,
-            0, // Step counter would need to be tracked separately
+            curr_state,
+            reward,
+            action,
+            next_state,
+            info,
+            terminal,
+            self.steps as u32,
         ))
     }
 
@@ -185,11 +177,82 @@ impl Environment for MujocoReacherEnv {
     }
 
     fn is_truncated(&self) -> bool {
-        // For now, using a simple time-based truncation
-        self.env.time() > 1000.0
+        self.steps >= self.config.max_episode_steps
     }
 
     fn state(&self) -> Result<Self::State, Error> {
         self._get_obs()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_target_body_resolves_to_target_joints_not_arm_links() {
+        // qpos order (from model.xml): [joint0, joint1, target_x, target_y].
+        // Move only the target's slide joints and confirm the resolved
+        // "target" body moves by exactly that delta, while "fingertip"
+        // (which only depends on the arm joints) doesn't move at all. This
+        // directly catches the original bug, where both were read from
+        // hard-coded indices landing on the arm-link bodies instead: under
+        // that bug, target's position was insensitive to target_x/target_y.
+        let mut env = MujocoReacherEnv::new(None).unwrap();
+        let qvel = vec![0.0, 0.0, 0.0, 0.0];
+
+        env.env.set_state(&vec![0.0, 0.0, 0.0, 0.0], &qvel).unwrap();
+        let target_at_zero = env._get_target_pos().unwrap();
+        let fingertip_at_zero = env._get_fingertip_pos().unwrap();
+
+        env.env.set_state(&vec![0.0, 0.0, 0.15, -0.15], &qvel).unwrap();
+        let target_after_move = env._get_target_pos().unwrap();
+        let fingertip_after_move = env._get_fingertip_pos().unwrap();
+
+        assert!((target_after_move.x - target_at_zero.x - 0.15).abs() < 1e-6);
+        assert!((target_after_move.y - target_at_zero.y - (-0.15)).abs() < 1e-6);
+        assert!((fingertip_after_move - fingertip_at_zero).norm() < 1e-9);
+    }
+
+    #[test]
+    fn test_observation_dimension_matches_config() {
+        let env = MujocoReacherEnv::new(None).unwrap();
+        let obs = env.state().unwrap();
+        assert_eq!(obs.len(), env.config.observation_shape.0);
+        assert_eq!(obs.len(), 11);
+    }
+
+    #[test]
+    fn test_truncation_at_max_episode_steps() {
+        let config = ReacherConfig {
+            max_episode_steps: 5,
+            ..ReacherConfig::default()
+        };
+        let mut env = MujocoReacherEnv::new(Some(config)).unwrap();
+        env.reset(None).unwrap();
+
+        let action = DVector::zeros(env.env.nu());
+        for _ in 0..4 {
+            let exp = env.step(action.clone()).unwrap();
+            assert!(!exp.terminal.is_truncated());
+        }
+        let exp = env.step(action).unwrap();
+        assert!(exp.terminal.is_truncated());
+        assert!(env.is_truncated());
+    }
+
+    #[test]
+    fn test_reward_uses_correct_body_positions() {
+        let env = MujocoReacherEnv::new(None).unwrap();
+        let action = DVector::from_element(2, 0.0);
+
+        let (reward, info) = env._get_rew(&action).unwrap();
+
+        let target_pos = env._get_target_pos().unwrap();
+        let fingertip_pos = env._get_fingertip_pos().unwrap();
+        let expected_dist = -env.config.reward_dist_weight * (fingertip_pos - target_pos).norm();
+
+        assert!((info["reward_dist"] - expected_dist).abs() < 1e-9);
+        assert!((reward - expected_dist).abs() < 1e-9);
     }
 }

@@ -10,6 +10,7 @@ pub struct MujocoPusherEnv {
     pub config: PusherConfig,
     pub init_qpos: Vec<f64>,
     pub init_qvel: Vec<f64>,
+    steps: usize,
 }
 
 impl MujocoPusherEnv {
@@ -21,23 +22,28 @@ impl MujocoPusherEnv {
             init_qvel: env.init_qvel().into(),
             config,
             env,
+            steps: 0,
         })
     }
 
     fn _get_obs(&self) -> Result<DVector<f64>, Error> {
         let mut observation = Vec::new();
 
-        observation.extend_from_slice(self.env.qpos());
-        observation.extend_from_slice(self.env.qvel());
+        // Only the 7 arm joints, matching Gymnasium's Pusher-v4: the object
+        // and goal slide-joint positions are redundant with their body COMs
+        // below, so they're excluded (unlike Ant/HalfCheetah/etc., this env
+        // never includes them at all, not even optionally).
+        observation.extend_from_slice(&self.env.qpos()[..7]);
+        observation.extend_from_slice(&self.env.qvel()[..7]);
+
+        let fingertip_pos = self._get_fingertip_pos()?;
+        observation.extend_from_slice(&[fingertip_pos[0], fingertip_pos[1], fingertip_pos[2]]);
 
         let object_pos = self._get_object_pos()?;
         observation.extend_from_slice(&[object_pos[0], object_pos[1], object_pos[2]]);
 
         let target_pos = self._get_target_pos()?;
         observation.extend_from_slice(&[target_pos[0], target_pos[1], target_pos[2]]);
-
-        let fingertip_pos = self._get_fingertip_pos()?;
-        observation.extend_from_slice(&[fingertip_pos[0], fingertip_pos[1], fingertip_pos[2]]);
 
         Ok(DVector::from_vec(observation))
     }
@@ -79,44 +85,21 @@ impl MujocoPusherEnv {
     }
 
     fn _get_object_pos(&self) -> Result<nalgebra::Vector3<f64>, Error> {
-        if self.env.nbody() > 3 && self.env.xipos().len() > 3 {
-            let object_data = self.env.xipos()[3]; // Example: assuming object is at index 3
-            Ok(nalgebra::Vector3::new(
-                object_data[0],
-                object_data[1],
-                object_data[2],
-            ))
-        } else {
-            Ok(nalgebra::Vector3::new(0.0, 0.0, 0.0))
-        }
+        self.env
+            .body_com_vector("object")
+            .ok_or_else(|| Error::MjInitError("body 'object' not found in model".to_string()))
     }
 
     fn _get_target_pos(&self) -> Result<nalgebra::Vector3<f64>, Error> {
-        // In a real implementation, we'd find the target body by name and get its position
-        // For now, returning a default value
-        if self.env.nbody() > 4 && self.env.xipos().len() > 4 {
-            let target_data = self.env.xipos()[4]; // Example: assuming target is at index 4
-            Ok(nalgebra::Vector3::new(
-                target_data[0],
-                target_data[1],
-                target_data[2],
-            ))
-        } else {
-            Ok(nalgebra::Vector3::new(0.0, 0.0, 0.0))
-        }
+        self.env
+            .body_com_vector("goal")
+            .ok_or_else(|| Error::MjInitError("body 'goal' not found in model".to_string()))
     }
 
     fn _get_fingertip_pos(&self) -> Result<nalgebra::Vector3<f64>, Error> {
-        if self.env.nbody() > 2 && self.env.xipos().len() > 2 {
-            let fingertip_data = self.env.xipos()[2];
-            Ok(nalgebra::Vector3::new(
-                fingertip_data[0],
-                fingertip_data[1],
-                fingertip_data[2],
-            ))
-        } else {
-            Ok(nalgebra::Vector3::new(0.0, 0.0, 0.0))
-        }
+        self.env
+            .body_com_vector("tips_arm")
+            .ok_or_else(|| Error::MjInitError("body 'tips_arm' not found in model".to_string()))
     }
 
     fn _get_reset_info(&self) -> Result<HashMap<String, f64>, Error> {
@@ -135,6 +118,7 @@ impl Environment for MujocoPusherEnv {
     type Info = Info;
 
     fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
+        self.steps = 0;
         self.env.reset_to_initial()?;
 
         // Apply noise to initial state
@@ -172,13 +156,14 @@ impl Environment for MujocoPusherEnv {
         let curr_state = self.state()?;
 
         self.env.do_simulation(action.as_slice())?;
+        self.steps += 1;
 
         let next_state = self._get_obs()?;
 
         let (reward, reward_info) = self._get_rew(&action)?;
 
         let terminated = false;
-        let truncated = self.env.time() > 1000.0; // Time-based truncation
+        let truncated = self.steps >= self.config.max_episode_steps;
 
         let mut info = HashMap::new();
         info.extend(reward_info);
@@ -186,7 +171,13 @@ impl Environment for MujocoPusherEnv {
         let terminal = Terminal::from_flags(terminated, truncated);
 
         Ok(Experience::new(
-            curr_state, reward, action, next_state, info, terminal, 0,
+            curr_state,
+            reward,
+            action,
+            next_state,
+            info,
+            terminal,
+            self.steps as u32,
         ))
     }
 
@@ -195,10 +186,90 @@ impl Environment for MujocoPusherEnv {
     }
 
     fn is_truncated(&self) -> bool {
-        self.env.time() > 1000.0
+        self.steps >= self.config.max_episode_steps
     }
 
     fn state(&self) -> Result<Self::State, Error> {
         self._get_obs()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_body_lookups_match_model_xml() {
+        // model.xml declares: <body name="object" pos="0.45 -0.05 -0.275">
+        // and <body name="goal" pos="0.45 -0.05 -0.3230">, both with only
+        // slide joints starting at 0 displacement, so right after reset
+        // their COM should sit at (approximately) their declared pos. This
+        // guards against ever again reading these positions from the wrong
+        // body index.
+        let env = MujocoPusherEnv::new(None).unwrap();
+
+        let object_pos = env._get_object_pos().unwrap();
+        assert!((object_pos.x - 0.45).abs() < 1e-6);
+        assert!((object_pos.y - (-0.05)).abs() < 1e-6);
+        assert!((object_pos.z - (-0.275)).abs() < 1e-6);
+
+        let target_pos = env._get_target_pos().unwrap();
+        assert!((target_pos.x - 0.45).abs() < 1e-6);
+        assert!((target_pos.y - (-0.05)).abs() < 1e-6);
+        assert!((target_pos.z - (-0.3230)).abs() < 1e-6);
+
+        // tips_arm depends on the 7-joint arm chain rather than a fixed pos
+        // attribute, but it must resolve to a distinct body from object/goal.
+        let fingertip_pos = env._get_fingertip_pos().unwrap();
+        assert!((fingertip_pos - object_pos).norm() > 1e-3);
+        assert!((fingertip_pos - target_pos).norm() > 1e-3);
+    }
+
+    #[test]
+    fn test_observation_dimension_matches_config() {
+        let env = MujocoPusherEnv::new(None).unwrap();
+        let obs = env.state().unwrap();
+        assert_eq!(obs.len(), env.config.observation_shape.0);
+        assert_eq!(obs.len(), 23);
+    }
+
+    #[test]
+    fn test_truncation_at_max_episode_steps() {
+        let config = PusherConfig {
+            max_episode_steps: 5,
+            ..PusherConfig::default()
+        };
+        let mut env = MujocoPusherEnv::new(Some(config)).unwrap();
+        env.reset(None).unwrap();
+
+        let action = DVector::zeros(env.env.nu());
+        for _ in 0..4 {
+            let exp = env.step(action.clone()).unwrap();
+            assert!(!exp.terminal.is_truncated());
+        }
+        let exp = env.step(action).unwrap();
+        assert!(exp.terminal.is_truncated());
+        assert!(env.is_truncated());
+    }
+
+    #[test]
+    fn test_reward_uses_correct_body_positions() {
+        let env = MujocoPusherEnv::new(None).unwrap();
+        let action = DVector::from_element(7, 0.0);
+
+        let (reward, info) = env._get_rew(&action).unwrap();
+
+        let object_pos = env._get_object_pos().unwrap();
+        let target_pos = env._get_target_pos().unwrap();
+        let fingertip_pos = env._get_fingertip_pos().unwrap();
+
+        let expected_near =
+            -env.config.reward_near_weight * (object_pos - fingertip_pos).norm();
+        let expected_dist =
+            -env.config.reward_dist_weight * (target_pos - object_pos).norm();
+
+        assert!((info["reward_near"] - expected_near).abs() < 1e-9);
+        assert!((info["reward_dist"] - expected_dist).abs() < 1e-9);
+        assert!((reward - (expected_near + expected_dist)).abs() < 1e-9);
     }
 }

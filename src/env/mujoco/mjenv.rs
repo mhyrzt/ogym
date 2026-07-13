@@ -228,6 +228,30 @@ impl MjEnv {
         }
     }
 
+    /// Center-of-mass position (MuJoCo's `xipos`) of the body with the given
+    /// name, resolved by name rather than a hard-coded body index. This is
+    /// what Gymnasium's `get_body_com(name)` reads, as opposed to `body()`
+    /// above (`xpos`, the body frame origin) which can differ from the COM
+    /// whenever a body's geoms aren't centered on its frame origin.
+    pub fn body_com(&self, name: &str) -> Option<[f64; 3]> {
+        let id = self.model().name_to_id(ObjType::BODY, name)?;
+
+        if (id as usize) >= self.nbody() {
+            return None;
+        }
+
+        let ptr = self.state.ptr();
+
+        unsafe {
+            let pos_ptr = (*ptr).xipos.add((id as usize) * 3);
+            Some([*pos_ptr, *pos_ptr.add(1), *pos_ptr.add(2)])
+        }
+    }
+
+    pub fn body_com_vector(&self, name: &str) -> Option<na::Vector3<f64>> {
+        self.body_com(name).map(na::Vector3::from)
+    }
+
     pub fn qpos_mut(&mut self) -> &mut [f64] {
         let ptr = self.state.ptr();
         let nq = self.nq();
