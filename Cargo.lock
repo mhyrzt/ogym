@@ -423,8 +423,6 @@ dependencies = [
 [[package]]
 name = "mujoco-rust"
 version = "0.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72e3febd1d2020b111eb7d6cb221467421ab063ba29f834fc6af3d04967e9869"
 dependencies = [
  "arrayvec",
  "dirs 5.0.1",

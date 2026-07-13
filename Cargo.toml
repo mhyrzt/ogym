@@ -29,3 +29,9 @@ approx = "0.5.1"
 
 [dev-dependencies]
 tempfile = "3.10"
+
+# mujoco-rust 0.0.6 (crates.io) targets the pre-3.0 MuJoCo mjVFS C API, which
+# no longer exists in MuJoCo 3.x (see vendor/mujoco-rust/src/vfs.rs). Patched
+# locally until upstream (github.com/MuJoCo-Rust/MuJoCo-Rust) fixes it.
+[patch.crates-io]
+mujoco-rust = { path = "vendor/mujoco-rust" }
