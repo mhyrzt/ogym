@@ -1,4 +1,3 @@
-
 #[derive(Debug, Clone)]
 pub struct HumanoidStandupConfig {
     pub xml_file: String,

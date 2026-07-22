@@ -1,4 +1,3 @@
-
 #[derive(Debug, Clone)]
 pub struct SwimmerConfig {
     pub xml_file: String,

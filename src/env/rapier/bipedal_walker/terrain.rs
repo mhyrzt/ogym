@@ -236,7 +236,6 @@ impl TerrainGenerator {
 mod tests {
     use super::*;
     use rand::rngs::mock::StepRng;
-    
 
     #[test]
     fn test_terrain_generator_creation() {

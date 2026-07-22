@@ -1,6 +1,6 @@
 use super::config::SwimmerConfig;
-use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use crate::env::environment::{Environment, Experience, Terminal};
+use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use nalgebra::DVector;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::collections::HashMap;

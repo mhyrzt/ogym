@@ -160,7 +160,9 @@ impl Environment for Taxi {
     }
 
     fn is_terminal(&self) -> Result<bool, Error> {
-        Ok(self.pass_idx == self.dest_idx && self.pass_idx < 4 && self.taxi_loc() == LOCS[self.dest_idx])
+        Ok(self.pass_idx == self.dest_idx
+            && self.pass_idx < 4
+            && self.taxi_loc() == LOCS[self.dest_idx])
     }
 
     fn is_truncated(&self) -> bool {
