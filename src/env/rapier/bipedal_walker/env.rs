@@ -132,6 +132,8 @@ impl BipedalWalker {
         let collider = ColliderBuilder::convex_hull(&poly_points)
             .unwrap()
             .density(5.0)
+            .friction(0.1)
+            .collision_groups(InteractionGroups::new(0x0020.into(), 0x0001.into()))
             .active_events(ActiveEvents::COLLISION_EVENTS)
             .build();
         let rb = RigidBodyBuilder::dynamic()
@@ -187,10 +189,12 @@ impl BipedalWalker {
                 .limits([-0.8, 1.1])
                 .contacts_enabled(false)
                 .build();
-            let hip_handle =
-                self.world
-                    .impulse_joint_set
-                    .insert(self.hull_handle, upper_handle, hip_joint, true);
+            let hip_handle = self.world.impulse_joint_set.insert(
+                self.hull_handle,
+                upper_handle,
+                hip_joint,
+                true,
+            );
 
             self.leg_handles.push(upper_handle);
             self.joint_handles.push(hip_handle);
@@ -340,12 +344,20 @@ impl BipedalWalker {
             hip0_speed / self.config.speed_hip,
             knee0_angle + 1.0,
             knee0_speed / self.config.speed_knee,
-            if self.legs[1].ground_contact { 1.0 } else { 0.0 },
+            if self.legs[1].ground_contact {
+                1.0
+            } else {
+                0.0
+            },
             hip1_angle,
             hip1_speed / self.config.speed_hip,
             knee1_angle + 1.0,
             knee1_speed / self.config.speed_knee,
-            if self.legs[3].ground_contact { 1.0 } else { 0.0 },
+            if self.legs[3].ground_contact {
+                1.0
+            } else {
+                0.0
+            },
         ];
         state_vec.extend(self.lidar_fractions.clone());
         let mut out = SVector::<f32, STATE_SIZE>::zeros();
@@ -403,9 +415,11 @@ impl Environment for BipedalWalker {
                 };
                 if self.config.control_speed {
                     let speed = base_speed * a.clamp(-1.0, 1.0);
-                    joint
-                        .data
-                        .set_motor_velocity(JointAxis::AngX, speed, self.config.motors_torque);
+                    joint.data.set_motor_velocity(
+                        JointAxis::AngX,
+                        speed,
+                        self.config.motors_torque,
+                    );
                 } else {
                     // f32::signum() returns 1.0 (not 0.0) for a == 0.0, which would
                     // drive every joint at full speed on a no-op action. Gymnasium
@@ -433,9 +447,12 @@ impl Environment for BipedalWalker {
         self.steps += 1;
 
         let hull = &self.world.rigid_body_set[self.hull_handle];
-        let pos = hull.translation();
+        let pos_x = hull.translation().x;
         let angle = hull.rotation().angle();
-        let reward = self.compute_reward(pos.x, angle, action.as_slice()) as f64;
+        let mut reward = self.compute_reward(pos_x, angle, action.as_slice()) as f64;
+        if self.game_over || pos_x < 0.0 {
+            reward = -100.0;
+        }
         let next_state = self.compute_state();
         let terminal = self.to_terminal()?;
 
@@ -451,7 +468,10 @@ impl Environment for BipedalWalker {
     }
 
     fn is_terminal(&self) -> Result<bool, Error> {
-        Ok(self.game_over || self.steps >= self.config.max_episode_steps)
+        let pos_x = self.world.rigid_body_set[self.hull_handle].translation().x;
+        let track_end = (self.config.terrain_length - self.config.terrain_grass) as f32
+            * self.config.terrain_step;
+        Ok(self.game_over || pos_x < 0.0 || pos_x > track_end)
     }
 
     fn is_truncated(&self) -> bool {
@@ -556,7 +576,11 @@ mod tests {
 
         assert!(walker.is_truncated());
 
-        assert!(walker.is_terminal().unwrap());
+        // A pure timeout is a truncation, not a termination (matches
+        // Gymnasium's TimeLimit wrapper semantics: terminated stays false).
+        assert!(!walker.is_terminal().unwrap());
+        assert!(walker.to_terminal().unwrap().is_truncated());
+        assert!(!walker.to_terminal().unwrap().is_terminated());
     }
 
     #[test]
@@ -620,10 +644,14 @@ mod tests {
             driven_negative.step(negative_action).unwrap();
         }
 
-        let (hip0_angle_positive, _) = driven_positive
-            .joint_relative_angle_speed(driven_positive.hull_handle, driven_positive.leg_handles[0]);
-        let (hip0_angle_negative, _) = driven_negative
-            .joint_relative_angle_speed(driven_negative.hull_handle, driven_negative.leg_handles[0]);
+        let (hip0_angle_positive, _) = driven_positive.joint_relative_angle_speed(
+            driven_positive.hull_handle,
+            driven_positive.leg_handles[0],
+        );
+        let (hip0_angle_negative, _) = driven_negative.joint_relative_angle_speed(
+            driven_negative.hull_handle,
+            driven_negative.leg_handles[0],
+        );
 
         assert!(
             hip0_angle_positive > hip0_angle_negative + 0.1,

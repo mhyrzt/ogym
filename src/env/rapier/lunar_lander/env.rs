@@ -11,8 +11,8 @@ use nalgebra::{point, Isometry2, SVector, Vector2};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use rapier2d::prelude::{
-    ColliderBuilder, ColliderHandle, CollisionEvent, InteractionGroups, RevoluteJointBuilder,
-    RigidBodyBuilder, RigidBodyHandle, RigidBodyType,
+    ActiveEvents, ColliderBuilder, ColliderHandle, CollisionEvent, InteractionGroups,
+    RevoluteJointBuilder, RigidBodyBuilder, RigidBodyHandle, RigidBodyType,
 };
 use std::f32::consts::PI;
 use std::f64::consts::TAU;
@@ -47,8 +47,11 @@ impl LunarLander {
     pub fn new(config: LunarLanderConfig) -> Result<Self, Error> {
         let ha = SVector::from_vec(vec![1.0, 1.0]);
         let hs = SVector::from_vec(vec![2.5, 2.5, 10.0, 10.0, TAU, 10.0, 1.0, 1.0]);
+        let mut low = -hs;
+        low[6] = 0.0;
+        low[7] = 0.0;
         let space = EnvSpace {
-            state: Boxed::new(-hs, hs)?,
+            state: Boxed::new(low, hs)?,
             action: match config.continuous {
                 true => Mixed::continuous(-ha, ha)?,
                 false => Mixed::discrete(4)?,
@@ -101,6 +104,8 @@ impl LunarLander {
             .density(5.0)
             .friction(0.1)
             .restitution(0.0)
+            .collision_groups(InteractionGroups::new(0x0010.into(), 0x0001.into()))
+            .active_events(ActiveEvents::COLLISION_EVENTS)
             .build();
 
         self.world.collider_set.insert_with_parent(
@@ -112,9 +117,13 @@ impl LunarLander {
         let force = self.config.initial_random;
         let force_x = self.rng.random_range(-force..force) as f32;
         let force_y = self.rng.random_range(-force..force) as f32;
+        // Gymnasium applies this as a *force* (ApplyForceToCenter), whose effect
+        // on velocity is scaled by the integration dt; an impulse of the same
+        // raw magnitude would produce a far larger velocity kick.
+        let dt = 1.0 / self.config.fps as f32;
 
         if let Some(body) = self.world.rigid_body_set.get_mut(lander_handle) {
-            body.apply_impulse(Vector2::new(force_x, force_y), true);
+            body.apply_impulse(Vector2::new(force_x * dt, force_y * dt), true);
         }
 
         self.lander = lander_handle;
@@ -138,12 +147,13 @@ impl LunarLander {
                 .build();
             let handle = self.world.rigid_body_set.insert(body);
 
-            let hx = self.config.leg_width / self.config.scale / 2.0;
-            let hy = self.config.leg_length / self.config.scale / 2.0;
+            let hx = self.config.leg_width / self.config.scale;
+            let hy = self.config.leg_length / self.config.scale;
             let coll = ColliderBuilder::cuboid(hx, hy)
                 .density(1.0)
                 .restitution(0.0)
                 .collision_groups(InteractionGroups::new(0x0020.into(), 0x001.into()))
+                .active_events(ActiveEvents::COLLISION_EVENTS)
                 .build();
 
             self.world.collider_set.insert_with_parent(
@@ -159,7 +169,7 @@ impl LunarLander {
                     self.config.leg_offset_y / self.config.scale,
                 ])
                 .motor_velocity(0.3 * i, self.config.leg_spring_torque)
-                .limits(if i == -1. { [0.9, 0.4] } else { [-0.4, -0.9] })
+                .limits(if i == -1. { [0.4, 0.9] } else { [-0.9, -0.4] })
                 .build();
 
             let joint_handle =
@@ -224,8 +234,8 @@ impl LunarLander {
         }
 
         let (side_engine_active, direction) = match action {
-            MixedItem::Discrete(1) => (true, 1.0),
-            MixedItem::Discrete(3) => (true, -1.0),
+            MixedItem::Discrete(1) => (true, -1.0),
+            MixedItem::Discrete(3) => (true, 1.0),
             MixedItem::Continuous(actions) => (actions[1].abs() > 0.5, actions[1].signum()),
             _ => (false, 0.0),
         };
@@ -424,7 +434,7 @@ impl Environment for LunarLander {
             self.torque_idx = 0.0;
         }
 
-        let (helipad, moon) = generate_moon(&self.config, &mut self.world);
+        let (helipad, moon) = generate_moon(&self.config, &mut self.world, &mut self.rng);
         self.helipad = helipad;
         self.moon = moon;
 

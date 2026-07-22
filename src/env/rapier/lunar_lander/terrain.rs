@@ -1,19 +1,25 @@
 use super::utils::{Helipad, CHUNKS, MIDDLE};
 use crate::env::rapier::{lunar_lander::config::LunarLanderConfig, world::PhysicsWorld};
 use nalgebra::point;
+use rand::rngs::StdRng;
 use rand::Rng;
-use rapier2d::prelude::{ColliderBuilder, RigidBodyBuilder, RigidBodyHandle, RigidBodyType};
+use rapier2d::prelude::{
+    ActiveEvents, ColliderBuilder, RigidBodyBuilder, RigidBodyHandle, RigidBodyType,
+};
 
 pub fn generate_moon(
     config: &LunarLanderConfig,
     world: &mut PhysicsWorld,
+    rng: &mut StdRng,
 ) -> (Helipad, RigidBodyHandle) {
     let w = config.get_scaled_width();
     let h = config.get_scaled_height();
 
-    let mut helipad = Helipad::default();
+    let mut helipad = Helipad {
+        y: h / 4.0,
+        ..Helipad::default()
+    };
 
-    let mut rng = rand::rng();
     let height: Vec<f32> = (0..=CHUNKS)
         .map(|i| match i {
             x if ((MIDDLE - 2)..=(MIDDLE + 2)).contains(&x) => helipad.y,
@@ -25,7 +31,6 @@ pub fn generate_moon(
         .map(|i| w / (CHUNKS - 1) as f32 * i as f32)
         .collect();
 
-    helipad.y = h / 4.0;
     helipad.x1 = chunk_x[MIDDLE - 1];
     helipad.x2 = chunk_x[MIDDLE + 1];
 
@@ -46,7 +51,10 @@ pub fn generate_moon(
     (0..(CHUNKS - 1)).for_each(|i| {
         let p1 = point![chunk_x[i], smooth_y[i]];
         let p2 = point![chunk_x[i + 1], smooth_y[i + 1]];
-        let coll = ColliderBuilder::segment(p1, p2).friction(0.1).build();
+        let coll = ColliderBuilder::segment(p1, p2)
+            .friction(0.1)
+            .active_events(ActiveEvents::COLLISION_EVENTS)
+            .build();
         world
             .collider_set
             .insert_with_parent(coll, moon_handle, &mut world.rigid_body_set);
@@ -60,6 +68,7 @@ mod tests {
     use super::*;
     use crate::env::rapier::lunar_lander::config::LunarLanderConfig;
     use crate::env::rapier::world::PhysicsWorld;
+    use rand::SeedableRng;
     use rapier2d::prelude::{ColliderSet, RigidBodySet};
 
     // Helper to create a basic PhysicsWorld for testing
@@ -78,8 +87,9 @@ mod tests {
             .with_viewport_size(600, 400)
             .with_scale(30.0);
         let mut world = create_test_world();
+        let mut rng = StdRng::seed_from_u64(0);
 
-        let (helipad, moon_handle) = generate_moon(&config, &mut world);
+        let (helipad, moon_handle) = generate_moon(&config, &mut world, &mut rng);
 
         // 1. Verify RigidBody creation
         assert!(
@@ -113,8 +123,9 @@ mod tests {
     fn test_moon_colliders_count() {
         let config = LunarLanderConfig::default();
         let mut world = create_test_world();
+        let mut rng = StdRng::seed_from_u64(0);
 
-        let (_, moon_handle) = generate_moon(&config, &mut world);
+        let (_, moon_handle) = generate_moon(&config, &mut world, &mut rng);
 
         // CHUNKS is 11. The loop runs 0..(CHUNKS-1), so 10 segments.
         // We need to count how many colliders are attached to the moon body.
@@ -134,8 +145,9 @@ mod tests {
     fn test_moon_colliders_properties() {
         let config = LunarLanderConfig::default();
         let mut world = create_test_world();
+        let mut rng = StdRng::seed_from_u64(0);
 
-        let (_, moon_handle) = generate_moon(&config, &mut world);
+        let (_, moon_handle) = generate_moon(&config, &mut world, &mut rng);
 
         // Check friction of the generated segments
         for (_, collider) in world.collider_set.iter() {
@@ -164,7 +176,8 @@ mod tests {
 
         let config = LunarLanderConfig::default();
         let mut world = create_test_world();
-        let (_, moon_handle) = generate_moon(&config, &mut world);
+        let mut rng = StdRng::seed_from_u64(0);
+        let (_, moon_handle) = generate_moon(&config, &mut world, &mut rng);
 
         // We want to inspect the Y coordinates of the segments specifically around the middle.
         // This verifies that the logic trying to flatten the helipad area is actually producing segments.

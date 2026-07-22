@@ -27,7 +27,7 @@ impl Default for LunarLanderConfig {
         Self {
             scale: 30.0,
             fps: 50,
-            max_steps: 200,
+            max_steps: 1000,
             main_engine_force: 13.0,
             side_engine_force: 0.6,
             side_engine_offset_x: 12.0,
@@ -162,7 +162,7 @@ mod tests {
 
         assert_eq!(config.scale, 30.0);
         assert_eq!(config.fps, 50);
-        assert_eq!(config.max_steps, 200);
+        assert_eq!(config.max_steps, 1000);
         assert_eq!(config.main_engine_force, 13.0);
         assert_eq!(config.side_engine_force, 0.6);
         assert_eq!(config.side_engine_offset_x, 12.0);
