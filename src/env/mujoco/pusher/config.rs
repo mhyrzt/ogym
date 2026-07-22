@@ -1,4 +1,3 @@
-
 #[derive(Debug, Clone)]
 pub struct PusherConfig {
     pub xml_file: String,
@@ -21,7 +20,7 @@ impl Default for PusherConfig {
             reward_control_weight: 0.1,
             observation_shape: (23,),             // 23 elements based on env
             observation_dtype: "f64".to_string(), // Representing numpy.float64
-            max_episode_steps: 1000,
+            max_episode_steps: 100,
         }
     }
 }

@@ -3,6 +3,7 @@ use crate::env::environment::{Environment, Experience, Terminal};
 use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use nalgebra::DVector;
 use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand_distr::StandardNormal;
 use std::collections::HashMap;
 
 pub type Action = DVector<f64>;
@@ -108,8 +109,8 @@ impl Environment for MujocoHalfCheetahEnv {
             self.init_qvel
                 .iter()
                 .map(|&val| {
-                    let noise = rng.random_range(-noise_scale..noise_scale);
-                    val + noise
+                    let noise: f64 = rng.sample(StandardNormal);
+                    val + noise * noise_scale
                 })
                 .collect()
         } else {

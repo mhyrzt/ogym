@@ -137,7 +137,7 @@ impl MujocoHumanoidEnv {
     pub fn is_healthy(&self) -> Result<bool, Error> {
         let z_pos = self.env.qpos()[2];
         let (min_z, max_z) = self.config.healthy_z_range;
-        Ok(z_pos >= min_z && z_pos <= max_z)
+        Ok(z_pos > min_z && z_pos < max_z)
     }
 
     fn _mass_center(&self) -> Result<Vector2<f64>, Error> {

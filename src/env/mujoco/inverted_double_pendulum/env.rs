@@ -1,8 +1,9 @@
 use super::config::InvertedDoublePendulumConfig;
-use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use crate::env::environment::{Environment, Experience, Terminal};
+use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use nalgebra::DVector;
 use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand_distr::StandardNormal;
 use std::collections::HashMap;
 
 pub struct MujocoInvertedDoublePendulumEnv {
@@ -30,8 +31,8 @@ impl MujocoInvertedDoublePendulumEnv {
 
     /// Matches Gymnasium's InvertedDoublePendulum-v4 exactly: cart x
     /// position, sin/cos of the two pole angles (not the raw angles),
-    /// velocity-clamped qvel, and the constraint force on the last DOF
-    /// (hinge2) clamped the same way.
+    /// velocity-clamped qvel, and the constraint force on the cart's
+    /// slider DOF (index 0) clamped the same way.
     fn _get_obs(&self) -> Result<DVector<f64>, Error> {
         let qpos = self.env.qpos();
         let qvel = self.env.qvel();
@@ -46,7 +47,7 @@ impl MujocoInvertedDoublePendulumEnv {
         observation.extend(qvel.iter().map(|v| v.clamp(-10.0, 10.0)));
         observation.push(
             qfrc_constraint
-                .last()
+                .first()
                 .copied()
                 .unwrap_or(0.0)
                 .clamp(-10.0, 10.0),
@@ -71,8 +72,9 @@ impl MujocoInvertedDoublePendulumEnv {
     /// reward = alive_bonus - dist_penalty - vel_penalty, matching
     /// Gymnasium's InvertedDoublePendulum-v4 reward exactly. dist_penalty
     /// pulls the tip toward (x=0, z=2) (upright, centered); vel_penalty
-    /// damps both pole angular velocities.
-    fn _calculate_reward(&self) -> f64 {
+    /// damps both pole angular velocities. alive_bonus is zeroed once the
+    /// pendulum has fallen, matching Gym's post-v4 fix.
+    fn _calculate_reward(&self) -> Result<f64, Error> {
         let tip = self._tip_pos();
         let dist_penalty = 0.01 * tip[0].powi(2) + (tip[2] - 2.0).powi(2);
 
@@ -81,7 +83,13 @@ impl MujocoInvertedDoublePendulumEnv {
         let v2 = qvel[2];
         let vel_penalty = 1e-3 * v1.powi(2) + 5e-3 * v2.powi(2);
 
-        self.config.healthy_reward - dist_penalty - vel_penalty
+        let alive_bonus = if self._has_fallen()? {
+            0.0
+        } else {
+            self.config.healthy_reward
+        };
+
+        Ok(alive_bonus - dist_penalty - vel_penalty)
     }
 
     fn _get_info(&self) -> Result<HashMap<String, f64>, Error> {
@@ -130,8 +138,9 @@ impl Environment for MujocoInvertedDoublePendulumEnv {
         // Add noise to velocities
         let mut qvel = self.init_qvel.clone();
         if noise_high > noise_low {
-            for i in 0..qvel.len() {
-                qvel[i] += rng.random_range(noise_low..noise_high);
+            for v in qvel.iter_mut() {
+                let noise: f64 = rng.sample(StandardNormal);
+                *v += noise * self.config.reset_noise_scale;
             }
         }
 
@@ -159,7 +168,7 @@ impl Environment for MujocoInvertedDoublePendulumEnv {
         // Get new observation
         let next_state = self._get_obs()?;
 
-        let reward = self._calculate_reward();
+        let reward = self._calculate_reward()?;
 
         let terminated = self._has_fallen()?;
         let truncated = self.steps >= self.config.max_steps;

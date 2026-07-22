@@ -1,6 +1,6 @@
 use super::config::Walker2dConfig;
-use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use crate::env::environment::{Environment, Experience, Terminal};
+use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use nalgebra::DVector;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::collections::HashMap;
@@ -30,7 +30,12 @@ impl MujocoWalker2dEnv {
         let mut observation = Vec::new();
 
         let mut position = self.env.qpos().to_vec();
-        let velocity = self.env.qvel().to_vec();
+        let mut velocity = self.env.qvel().to_vec();
+
+        // Clip velocity to range [-10, 10] as in Gymnasium's implementation
+        for v in &mut velocity {
+            *v = v.clamp(-10.0, 10.0);
+        }
 
         if self.config.exclude_current_positions_from_observation {
             position = position[1..].to_vec();

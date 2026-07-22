@@ -1,6 +1,6 @@
 use super::config::PusherConfig;
-use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use crate::env::environment::{Environment, Experience, Terminal};
+use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use nalgebra::DVector;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::collections::HashMap;
@@ -48,10 +48,7 @@ impl MujocoPusherEnv {
         Ok(DVector::from_vec(observation))
     }
 
-    fn _get_rew(
-        &self,
-        action: &DVector<f64>,
-    ) -> Result<(f64, HashMap<String, f64>), Error> {
+    fn _get_rew(&self, action: &DVector<f64>) -> Result<(f64, HashMap<String, f64>), Error> {
         let object_pos = self._get_object_pos()?;
         let target_pos = self._get_target_pos()?;
         let fingertip_pos = self._get_fingertip_pos()?;
@@ -121,24 +118,38 @@ impl Environment for MujocoPusherEnv {
         self.steps = 0;
         self.env.reset_to_initial()?;
 
-        // Apply noise to initial state
         let mut rng = match seed {
             Some(s) => StdRng::seed_from_u64(s),
             None => StdRng::from_os_rng(),
         };
 
-        let noise_low = -0.01;
-        let noise_high = 0.01;
-
+        // Matches Gymnasium's Pusher-v5 reset_model: the 7 arm joints keep
+        // init_qpos verbatim; only the object's slide-joint position is
+        // randomized (rejection-sampled at least 0.17 away from the fixed
+        // goal at the origin), the goal itself never moves.
         let mut qpos = self.init_qpos.clone();
-        for i in 0..qpos.len() {
-            qpos[i] += rng.random_range(noise_low..noise_high);
-        }
+        let n = qpos.len();
+        let cylinder_pos = loop {
+            let candidate: [f64; 2] = [rng.random_range(-0.3..0.0), rng.random_range(-0.2..0.2)];
+            if candidate[0].hypot(candidate[1]) > 0.17 {
+                break candidate;
+            }
+        };
+        qpos[n - 4] = cylinder_pos[0];
+        qpos[n - 3] = cylinder_pos[1];
+        qpos[n - 2] = 0.0;
+        qpos[n - 1] = 0.0;
 
-        let mut qvel = self.init_qvel.clone();
-        for i in 0..qvel.len() {
-            qvel[i] += rng.random_range(noise_low..noise_high);
-        }
+        let mut qvel: Vec<f64> = self
+            .init_qvel
+            .iter()
+            .map(|&v| v + rng.random_range(-0.005..0.005))
+            .collect();
+        let m = qvel.len();
+        qvel[m - 4] = 0.0;
+        qvel[m - 3] = 0.0;
+        qvel[m - 2] = 0.0;
+        qvel[m - 1] = 0.0;
 
         self.env.set_state(&qpos, &qvel)?;
 
@@ -263,10 +274,8 @@ mod tests {
         let target_pos = env._get_target_pos().unwrap();
         let fingertip_pos = env._get_fingertip_pos().unwrap();
 
-        let expected_near =
-            -env.config.reward_near_weight * (object_pos - fingertip_pos).norm();
-        let expected_dist =
-            -env.config.reward_dist_weight * (target_pos - object_pos).norm();
+        let expected_near = -env.config.reward_near_weight * (object_pos - fingertip_pos).norm();
+        let expected_dist = -env.config.reward_dist_weight * (target_pos - object_pos).norm();
 
         assert!((info["reward_near"] - expected_near).abs() < 1e-9);
         assert!((info["reward_dist"] - expected_dist).abs() < 1e-9);

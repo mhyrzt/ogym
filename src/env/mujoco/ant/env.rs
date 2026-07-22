@@ -3,6 +3,7 @@ use crate::env::environment::{Environment, Experience, Terminal};
 use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use nalgebra::DVector;
 use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand_distr::StandardNormal;
 use std::collections::HashMap;
 
 pub struct MujocoAntEnv {
@@ -38,7 +39,7 @@ impl MujocoAntEnv {
         };
 
         let cfrc_len = if self.config.include_cfrc_ext_in_observation {
-            self.env.nbody() * 6
+            (self.env.nbody() - 1) * 6
         } else {
             0
         };
@@ -56,6 +57,20 @@ impl MujocoAntEnv {
     }
 
     fn _get_contact_forces(&self) -> impl Iterator<Item = f64> + '_ {
+        let (min_val, max_val) = self.config.contact_force_range;
+        self.env
+            .cfrc_ext()
+            .iter()
+            .skip(1)
+            .flat_map(move |body_forces| {
+                body_forces.iter().map(move |&f| f.clamp(min_val, max_val))
+            })
+    }
+
+    // Gymnasium's contact_cost sums over the full (clipped, un-sliced)
+    // cfrc_ext, unlike the observation's contact forces which skip body 0
+    // (the world body).
+    fn _contact_forces_for_cost(&self) -> impl Iterator<Item = f64> + '_ {
         let (min_val, max_val) = self.config.contact_force_range;
         self.env.cfrc_ext().iter().flat_map(move |body_forces| {
             body_forces.iter().map(move |&f| f.clamp(min_val, max_val))
@@ -78,7 +93,10 @@ impl MujocoAntEnv {
             self.config.ctrl_cost_weight * action.iter().map(|x| x.powi(2)).sum::<f64>();
 
         let contact_cost = self.config.contact_cost_weight
-            * self._get_contact_forces().map(|x| x.powi(2)).sum::<f64>();
+            * self
+                ._contact_forces_for_cost()
+                .map(|x| x.powi(2))
+                .sum::<f64>();
 
         let total_reward = forward_reward + healthy_reward - ctrl_cost - contact_cost;
 
@@ -143,7 +161,8 @@ impl Environment for MujocoAntEnv {
 
         let mut qvel = self.init_qvel.clone();
         qvel.iter_mut().for_each(|val| {
-            *val += scale * rng.random::<f64>() * 2.0 - scale;
+            let noise: f64 = rng.sample(StandardNormal);
+            *val += scale * noise;
         });
 
         self.env.set_state(&qpos, &qvel)?;

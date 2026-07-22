@@ -1,6 +1,6 @@
 use super::config::HumanoidStandupConfig;
-use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use crate::env::environment::{Environment, Experience, Terminal};
+use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use nalgebra::DVector;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::collections::HashMap;
@@ -103,12 +103,12 @@ impl MujocoHumanoidStandupEnv {
         action: &DVector<f64>,
     ) -> Result<(f64, HashMap<String, f64>), Error> {
         // Upright reward based on z position of torso (should be maximized)
-        let upright_reward = self.config.uph_cost_weight * self.env.qpos()[2]; // z position of torso/root
+        let upright_reward = self.config.uph_cost_weight * self.env.qpos()[2] / self.env.timestep(); // z position of torso/root
 
         let ctrl_cost = self._control_cost(action)?;
         let impact_cost = self._impact_cost()?;
 
-        let total_reward = upright_reward - ctrl_cost - impact_cost;
+        let total_reward = upright_reward - ctrl_cost - impact_cost + 1.0;
 
         let mut reward_info = HashMap::new();
         reward_info.insert("reward_upright".to_string(), upright_reward);

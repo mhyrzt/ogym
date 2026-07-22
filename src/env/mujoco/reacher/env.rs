@@ -1,6 +1,6 @@
 use super::config::ReacherConfig;
-use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use crate::env::environment::{Environment, Experience, Terminal};
+use crate::env::{environment::Error, mujoco::mjenv::MjEnv};
 use nalgebra::DVector;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::collections::HashMap;
@@ -28,10 +28,11 @@ impl MujocoReacherEnv {
 
     // Helper methods
     fn _get_obs(&self) -> Result<DVector<f64>, Error> {
-        // Matches Gymnasium's Reacher-v4 exactly: cos/sin of the two arm
+        // Matches Gymnasium's Reacher-v5 exactly: cos/sin of the two arm
         // joint angles (not the raw angles), the target's own joint
         // position, the arm's joint velocities only (not the target's), and
-        // the 3D fingertip-to-target vector (not raw absolute positions).
+        // the 2D fingertip-to-target vector (v4 uses the full 3D vector;
+        // v5 drops the always-zero z component for this planar arm).
         let theta = &self.env.qpos()[0..2];
 
         let mut observation = Vec::new();
@@ -46,15 +47,11 @@ impl MujocoReacherEnv {
         let target_pos = self._get_target_pos()?;
         observation.push(fingertip_pos[0] - target_pos[0]);
         observation.push(fingertip_pos[1] - target_pos[1]);
-        observation.push(fingertip_pos[2] - target_pos[2]);
 
         Ok(DVector::from_vec(observation))
     }
 
-    fn _get_rew(
-        &self,
-        action: &DVector<f64>,
-    ) -> Result<(f64, HashMap<String, f64>), Error> {
+    fn _get_rew(&self, action: &DVector<f64>) -> Result<(f64, HashMap<String, f64>), Error> {
         let target_pos = self._get_target_pos()?;
         let fingertip_pos = self._get_fingertip_pos()?;
         let dist = (fingertip_pos - target_pos).norm();
@@ -102,26 +99,37 @@ impl Environment for MujocoReacherEnv {
         self.steps = 0;
         self.env.reset_to_initial()?;
 
-        // Apply noise to initial state
         let mut rng = match seed {
             Some(s) => StdRng::seed_from_u64(s),
             None => StdRng::from_os_rng(),
         };
 
-        let noise_low = -0.1; // Default noise for reacher
-        let noise_high = 0.1;
-
-        // Add noise to positions
+        // Add noise to all positions (arm + target), then overwrite the
+        // target with a rejection-sampled point inside the radius-0.2 disc,
+        // matching Gymnasium's Reacher-v4 reset_model.
         let mut qpos = self.init_qpos.clone();
-        for i in 0..qpos.len() {
-            qpos[i] += rng.random_range(noise_low..noise_high);
+        for v in qpos.iter_mut() {
+            *v += rng.random_range(-0.1..0.1);
         }
 
-        // Add noise to velocities
+        let goal = loop {
+            let candidate: [f64; 2] = [rng.random_range(-0.2..0.2), rng.random_range(-0.2..0.2)];
+            if candidate[0].hypot(candidate[1]) < 0.2 {
+                break candidate;
+            }
+        };
+        let n = qpos.len();
+        qpos[n - 2] = goal[0];
+        qpos[n - 1] = goal[1];
+
+        // Add noise to velocities, then zero the target's (it never moves).
         let mut qvel = self.init_qvel.clone();
-        for i in 0..qvel.len() {
-            qvel[i] += rng.random_range(noise_low..noise_high);
+        for v in qvel.iter_mut() {
+            *v += rng.random_range(-0.005..0.005);
         }
+        let m = qvel.len();
+        qvel[m - 2] = 0.0;
+        qvel[m - 1] = 0.0;
 
         self.env.set_state(&qpos, &qvel)?;
 
@@ -205,7 +213,9 @@ mod tests {
         let target_at_zero = env._get_target_pos().unwrap();
         let fingertip_at_zero = env._get_fingertip_pos().unwrap();
 
-        env.env.set_state(&vec![0.0, 0.0, 0.15, -0.15], &qvel).unwrap();
+        env.env
+            .set_state(&vec![0.0, 0.0, 0.15, -0.15], &qvel)
+            .unwrap();
         let target_after_move = env._get_target_pos().unwrap();
         let fingertip_after_move = env._get_fingertip_pos().unwrap();
 
@@ -219,7 +229,7 @@ mod tests {
         let env = MujocoReacherEnv::new(None).unwrap();
         let obs = env.state().unwrap();
         assert_eq!(obs.len(), env.config.observation_shape.0);
-        assert_eq!(obs.len(), 11);
+        assert_eq!(obs.len(), 10);
     }
 
     #[test]
