@@ -15,6 +15,7 @@ from matplotlib.ticker import StrMethodFormatter
 BENCHMARK_DIR = Path(__file__).resolve().parent
 RESULTS_FILE = BENCHMARK_DIR / "results" / "all_results.json"
 OUTPUT_IMAGE = BENCHMARK_DIR / "results" / "benchmark.png"
+OUTPUT_MARKDOWN = BENCHMARK_DIR / "results" / "all_results.md"
 IMPLEMENTATIONS = ("ogym", "gym")
 COLORS = {"ogym": "#ff7f0e", "gym": "#1f77b4"}
 LABELS = {"ogym": "ogym (Rust)", "gym": "Gymnasium (Python)"}
@@ -62,6 +63,10 @@ ENVIRONMENT_GROUPS = (
         ),
     ),
 )
+REPORT_LABELS = {
+    "inverted-double-pendulum": "InvertedDoublePendulum",
+    "inverted-pendulum": "InvertedPendulum",
+}
 
 
 def load_data(filepath: Path) -> dict:
@@ -129,6 +134,44 @@ def format_milliseconds(value: float) -> str:
     if value >= 10:
         return f"{value:.1f}"
     return f"{value:.2f}"
+
+
+def write_markdown_report(
+    environments: dict[str, dict[str, dict[str, float]]],
+    output_markdown: Path = OUTPUT_MARKDOWN,
+) -> None:
+    """Write a compact implementation comparison from Hyperfine results."""
+    lines = [
+        "# Benchmark results",
+        "",
+        "Mean execution time ± standard deviation in milliseconds. Lower is better.",
+        "",
+        "| Family | Environment | OGym (Rust) | Gymnasium (Python) | Speedup |",
+        "| --- | --- | ---: | ---: | ---: |",
+    ]
+
+    for group_name, group_environments in ENVIRONMENT_GROUPS:
+        for slug, plot_label in group_environments:
+            results = environments.get(slug, {})
+            if any(implementation not in results for implementation in IMPLEMENTATIONS):
+                continue
+
+            ogym = results["ogym"]
+            gym = results["gym"]
+            ogym_mean = ogym["mean"] * SECONDS_TO_MILLISECONDS
+            ogym_stddev = ogym["stddev"] * SECONDS_TO_MILLISECONDS
+            gym_mean = gym["mean"] * SECONDS_TO_MILLISECONDS
+            gym_stddev = gym["stddev"] * SECONDS_TO_MILLISECONDS
+            speedup = gym_mean / ogym_mean
+            report_label = REPORT_LABELS.get(slug, plot_label)
+            lines.append(
+                f"| {group_name} | {report_label} | "
+                f"{ogym_mean:,.1f} ± {ogym_stddev:,.1f} | "
+                f"{gym_mean:,.1f} ± {gym_stddev:,.1f} | {speedup:,.1f}× |"
+            )
+
+    output_markdown.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Report saved to {output_markdown}")
 
 
 def group_title(
@@ -313,7 +356,9 @@ def plot_benchmark(
 
 
 def main() -> None:
-    plot_benchmark(parse_results(load_data(RESULTS_FILE)))
+    environments = parse_results(load_data(RESULTS_FILE))
+    plot_benchmark(environments)
+    write_markdown_report(environments)
 
 
 if __name__ == "__main__":
