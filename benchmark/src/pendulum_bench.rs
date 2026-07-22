@@ -10,7 +10,7 @@ pub fn main() {
     env.reset(Some(42)).unwrap();
 
     let start = Instant::now();
-    for _ in 0..10000 {
+    for _ in 0..crate::LIGHTWEIGHT_STEPS {
         let action = MixedItem::Continuous(SVector::from_element(0.0));
         let _ = env.step(action);
         if env.is_done().unwrap() {

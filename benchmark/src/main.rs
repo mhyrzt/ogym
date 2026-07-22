@@ -14,9 +14,13 @@ mod pendulum_bench;
 mod pusher_bench;
 mod reacher_bench;
 mod swimmer_bench;
+mod toy_text_bench;
 mod walker2d_bench;
 
 use std::env;
+
+pub(crate) const LIGHTWEIGHT_STEPS: usize = 100_000;
+pub(crate) const PHYSICS_STEPS: usize = 5_000;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -44,9 +48,21 @@ fn main() {
             println!("Benchmarking BipedalWalker (ogym)...");
             bipedal_walker_bench::main();
         }
+        "blackjack" => {
+            println!("Benchmarking Blackjack (ogym)...");
+            toy_text_bench::blackjack();
+        }
         "cartpole" => {
             println!("Benchmarking CartPole (ogym)...");
             cartpole_bench::main();
+        }
+        "cliff_walking" => {
+            println!("Benchmarking CliffWalking (ogym)...");
+            toy_text_bench::cliff_walking();
+        }
+        "frozen_lake" => {
+            println!("Benchmarking FrozenLake (ogym)...");
+            toy_text_bench::frozen_lake();
         }
         "half_cheetah" => {
             println!("Benchmarking HalfCheetah (ogym)...");
@@ -100,6 +116,10 @@ fn main() {
             println!("Benchmarking Swimmer (ogym)...");
             swimmer_bench::main();
         }
+        "taxi" => {
+            println!("Benchmarking Taxi (ogym)...");
+            toy_text_bench::taxi();
+        }
         "all" => {
             println!("Benchmarking all environments (ogym)...");
             println!("Benchmarking Acrobot (ogym)...");
@@ -108,8 +128,14 @@ fn main() {
             ant_bench::main();
             println!("Benchmarking BipedalWalker (ogym)...");
             bipedal_walker_bench::main();
+            println!("Benchmarking Blackjack (ogym)...");
+            toy_text_bench::blackjack();
             println!("Benchmarking CartPole (ogym)...");
             cartpole_bench::main();
+            println!("Benchmarking CliffWalking (ogym)...");
+            toy_text_bench::cliff_walking();
+            println!("Benchmarking FrozenLake (ogym)...");
+            toy_text_bench::frozen_lake();
             println!("Benchmarking HalfCheetah (ogym)...");
             half_cheetah_bench::main();
             println!("Benchmarking Hopper (ogym)...");
@@ -134,6 +160,8 @@ fn main() {
             reacher_bench::main();
             println!("Benchmarking Swimmer (ogym)...");
             swimmer_bench::main();
+            println!("Benchmarking Taxi (ogym)...");
+            toy_text_bench::taxi();
             println!("Benchmarking Walker2d (ogym)...");
             walker2d_bench::main();
         }

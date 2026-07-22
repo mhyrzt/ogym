@@ -9,7 +9,7 @@ pub fn main() {
     env.reset(Some(42)).unwrap();
 
     let start = Instant::now();
-    for _ in 0..1000 {
+    for _ in 0..crate::PHYSICS_STEPS {
         // Reduced iterations for physics-based environment
         // Assuming action dimension of 3 for Hopper based on typical mujoco hopper env
         let action = DVector::<f64>::from_vec(vec![0.0; 3]);

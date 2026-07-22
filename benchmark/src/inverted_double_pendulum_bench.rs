@@ -1,6 +1,8 @@
 use nalgebra::DVector;
 use ogym::env::environment::Environment;
-use ogym::env::mujoco::inverted_double_pendulum::{InvertedDoublePendulumConfig, MujocoInvertedDoublePendulumEnv};
+use ogym::env::mujoco::inverted_double_pendulum::{
+    InvertedDoublePendulumConfig, MujocoInvertedDoublePendulumEnv,
+};
 use std::time::Instant;
 
 pub fn main() {
@@ -9,7 +11,7 @@ pub fn main() {
     env.reset(Some(42)).unwrap();
 
     let start = Instant::now();
-    for _ in 0..1000 {
+    for _ in 0..crate::PHYSICS_STEPS {
         // Reduced iterations for physics-based environment
         // Assuming action dimension of 1 for InvertedDoublePendulum based on typical mujoco pendulum env
         let action = DVector::<f64>::from_vec(vec![0.0; 1]);

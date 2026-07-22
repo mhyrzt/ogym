@@ -9,7 +9,7 @@ pub fn main() {
     env.reset(Some(42)).unwrap();
 
     let start = Instant::now();
-    for _ in 0..1000 {
+    for _ in 0..crate::PHYSICS_STEPS {
         let action = MixedItem::Discrete(0);
         let _ = env.step(action);
         if env.is_done().unwrap() {

@@ -4,5 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-ogym = { path = "../" }
+ogym = { path = "../", features = ["mujoco"] }
 nalgebra = "0.33"
+
+[patch.crates-io]
+mujoco-rust = { path = "../vendor/mujoco-rust" }

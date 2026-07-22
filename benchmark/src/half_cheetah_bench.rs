@@ -9,7 +9,7 @@ pub fn main() {
     env.reset(Some(42)).unwrap();
 
     let start = Instant::now();
-    for _ in 0..1000 {
+    for _ in 0..crate::PHYSICS_STEPS {
         // Reduced iterations for physics-based environment
         // Assuming action dimension of 6 for HalfCheetah based on typical mujoco half cheetah env
         let action = DVector::<f64>::from_vec(vec![0.0; 6]);
