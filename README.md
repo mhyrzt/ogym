@@ -1,7 +1,7 @@
 # OGym
 
 [![Crate](https://img.shields.io/crates/v/ogym.svg)](https://crates.io/crates/ogym)
-[![Documentation](https://docs.rs/ogym/badge.svg)](https://docs.rs/ogym)
+[![Documentation](https://img.shields.io/badge/docs-mdBook-blue.svg)](https://mhyrzt.github.io/ogym/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **A Rust-native reinforcement learning framework inspired by OpenAI's Gym.**
