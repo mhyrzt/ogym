@@ -2,6 +2,12 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_MUJOCO");
+
+    if env::var_os("CARGO_FEATURE_MUJOCO").is_none() {
+        return;
+    }
+
     let home = env::var("HOME").expect("Could not find HOME");
     let mujoco_path = PathBuf::from(&home).join(".local/mujoco/lib");
 

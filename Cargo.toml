@@ -2,33 +2,36 @@
 name = "ogym"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.82"
 authors = ["Mahyar Riazati <mhyrzt@gmail.com>"]
-description = "A Rust-native reinforcement learning framework inspired by OpenAI's Gym"
-homepage = "https://github.com/mhyrzt/ogym"
+description = "Composable, type-safe reinforcement learning environments for Rust"
 repository = "https://github.com/mhyrzt/ogym"
 readme = "README.md"
 license = "MIT"
-keywords = ["reinforcement-learning", "gym", "ai", "machine-learning", "rl"]
+keywords = ["reinforcement", "gym", "machine-learning", "simulation", "robotics"]
 categories = ["science", "algorithms", "simulation"]
 documentation = "https://docs.rs/ogym"
+publish = ["crates-io"]
 
-include = ["src/**", "Cargo.toml", "README.md", "LICENSE", "src/**/*.xml"]
+include = ["/src/**", "/build.rs", "/README.md"]
+
+[features]
+default = []
+mujoco = ["dep:mujoco-rs-sys", "dep:mujoco-rust"]
 
 [dependencies]
 nalgebra = "0.33.2"
-mujoco-rust = { version = "0.0.6" }
+mujoco-rs-sys = { version = "0.0.4", optional = true }
+mujoco-rust = { version = "0.0.6", optional = true }
 rand = "0.9.1"
+rand_distr = "0.5"
 rapier2d = { version = "0.26.1", features = ["simd-stable"] }
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
 thiserror = "2.0.12"
-anyhow = "1.0.100"
-mujoco-rs-sys = "0.0.4"
-rayon = "1.10"
-approx = "0.5.1"
 
 [dev-dependencies]
-tempfile = "3.10"
+approx = "0.5.1"
+serde_json = "1.0"
 
 # mujoco-rust 0.0.6 (crates.io) targets the pre-3.0 MuJoCo mjVFS C API, which
 # no longer exists in MuJoCo 3.x (see vendor/mujoco-rust/src/vfs.rs). Patched
