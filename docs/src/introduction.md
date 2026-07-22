@@ -8,6 +8,10 @@ Built entirely in Rust, OGym uses ownership and zero-cost abstractions to
 provide thread safety and strong performance, particularly for parallel
 environment execution.
 
+## Performance
+
+![OGym and Gymnasium benchmark comparison](https://raw.githubusercontent.com/mhyrzt/ogym/main/benchmark/results/benchmark.png)
+
 ## Features
 
 - **Type safety first:** Strongly typed actions and observations eliminate

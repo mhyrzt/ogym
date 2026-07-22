@@ -4,23 +4,41 @@
 [![Documentation](https://img.shields.io/badge/docs-mdBook-blue.svg)](https://mhyrzt.github.io/ogym/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**A Rust-native reinforcement learning framework inspired by OpenAI's Gym.**
+OGym is a Rust-native reinforcement learning library inspired by OpenAI Gym.
+It provides type-safe environments, explicit action and observation spaces,
+and implementations backed by native Rust, Rapier, and MuJoCo.
 
-## 📖 Overview
+## Highlights
 
-**OGym** is a high-performance reinforcement learning library designed for systems programming. Built entirely in Rust, it offers a flexible, type-safe, and efficient platform for building, training, and interacting with RL environments.
+- **Type-safe APIs:** Actions and observations are checked through strongly
+  typed spaces instead of untyped adapters.
+- **Native performance:** Environments use compiled Rust implementations with
+  minimal runtime overhead.
+- **Batch execution:** The `BatchEnvironment` abstraction supports
+  high-throughput workloads.
+- **Multiple backends:** Classic Control, Toy Text, Rapier2D, and MuJoCo
+  environments share a consistent interface.
+- **Opt-in native dependencies:** The default feature set does not require a
+  MuJoCo installation.
 
-While inspired by the Python-based OpenAI Gym, OGym leverages Rust's ownership model and zero-cost abstractions to ensure thread safety and maximize performance, particularly for parallel environment execution.
+## Benchmarks
 
-## ✨ Features
+![OGym and Gymnasium benchmark comparison](https://raw.githubusercontent.com/mhyrzt/ogym/main/benchmark/results/benchmark.png)
 
-- 🛡️ **Type-Safety First**: Strongly typed definitions for Actions and Observations eliminate common runtime shape errors.
-- 🚀 **High Performance**: Optimized for speed with minimal overhead, supporting compiled environments.
-- ⚡ **Native Vectorization**: First-class support for batched environments using parallel processing and matrix operations.
-- 🔌 **Modular Backend**: Flexible architecture supporting multiple physics engines (Rapier, MuJoCo) and classic control systems.
-- 📦 **Zero-Cost Abstractions**: Idiomatic Rust design patterns that enforce safety without sacrificing speed.
+The chart compares OGym with equivalent Gymnasium environments. Values are
+mean execution times with standard deviation; lower is better. See the
+[benchmark suite](benchmark/README.md) for methodology and reproduction steps.
 
-## 📦 Installation
+## Supported environments
+
+| Family | Environments | Backend |
+| --- | --- | --- |
+| Classic Control | Acrobot, CartPole, MountainCar, Pendulum | Native Rust |
+| Toy Text | Blackjack, CliffWalking, FrozenLake, Taxi | Native Rust |
+| Box2D / Rapier2D | BipedalWalker, LunarLander | Rapier |
+| MuJoCo | Ant, HalfCheetah, Hopper, Humanoid, HumanoidStandup, InvertedDoublePendulum, InvertedPendulum, Pusher, Reacher, Swimmer, Walker2d | MuJoCo |
+
+## Installation
 
 Add `ogym` to your `Cargo.toml`:
 
@@ -29,9 +47,10 @@ Add `ogym` to your `Cargo.toml`:
 ogym = "0.1.0"
 ```
 
-### External Dependencies (MuJoCo)
+### MuJoCo support
 
-MuJoCo environments are opt-in so the default crate does not require native MuJoCo libraries. Enable the `mujoco` feature in your `Cargo.toml`:
+MuJoCo environments are optional. Enable the `mujoco` feature and install the
+native MuJoCo library separately:
 
 ```toml
 [dependencies]
@@ -43,26 +62,30 @@ ogym = { version = "0.1.0", features = ["mujoco"] }
 > Use a source checkout for MuJoCo environments until the patched wrapper is
 > published; the default crates.io feature set is unaffected.
 
-You must also install the MuJoCo library separately.
+#### MuJoCo 3.10.0
 
-#### MuJoCo 3.9.0
-
-OGym targets the latest official MuJoCo release, **3.9.0**. On Linux x86-64, install the prebuilt archive under the default path expected by OGym:
+OGym targets MuJoCo **3.10.0**. On Linux x86-64, install the prebuilt archive
+under the default path expected by the project:
 
 ```sh
 mkdir -p "$HOME/.local/mujoco"
 curl --fail --location \
-  https://github.com/google-deepmind/mujoco/releases/download/3.9.0/mujoco-3.9.0-linux-x86_64.tar.gz \
+  https://github.com/google-deepmind/mujoco/releases/download/3.10.0/mujoco-3.10.0-linux-x86_64.tar.gz \
   | tar -xz --strip-components=1 -C "$HOME/.local/mujoco"
 ```
 
-Official prebuilt packages are also available for [Linux AArch64](https://github.com/google-deepmind/mujoco/releases/download/3.9.0/mujoco-3.9.0-linux-aarch64.tar.gz), [macOS universal](https://github.com/google-deepmind/mujoco/releases/download/3.9.0/mujoco-3.9.0-macos-universal2.dmg), and [Windows x86-64](https://github.com/google-deepmind/mujoco/releases/download/3.9.0/mujoco-3.9.0-windows-x86_64.zip).
+Official prebuilt packages are also available for
+[Linux AArch64](https://github.com/google-deepmind/mujoco/releases/download/3.10.0/mujoco-3.10.0-linux-aarch64.tar.gz),
+[macOS universal](https://github.com/google-deepmind/mujoco/releases/download/3.10.0/mujoco-3.10.0-macos-universal2.dmg),
+and
+[Windows x86-64](https://github.com/google-deepmind/mujoco/releases/download/3.10.0/mujoco-3.10.0-windows-x86_64.zip).
 
-> **Note:** If you install MuJoCo elsewhere, set `MUJOCO_DIR` to its root directory and ensure its library directory is available to the dynamic linker.
+If MuJoCo is installed elsewhere, set `MUJOCO_DIR` to its root directory and
+make its `lib` directory available to the platform's dynamic linker.
 
-## 🚀 Quick Start
+## Quick start
 
-Here is a minimal example running a Classic Control environment (CartPole):
+The following example runs a CartPole episode with sampled actions:
 
 ```rust
 use ogym::{
@@ -72,22 +95,15 @@ use ogym::{
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. Configure and initialize the environment
     let config = CartPoleConfig::new();
     let mut env = CartPole::new(config)?;
 
     env.reset(None)?;
 
     let mut total_reward: f64 = 0.0;
-
-    // 2. Run the simulation loop
     loop {
-        // Sample a random action from the valid action space
         let action = env.space.action.sample()?;
-
-        // Step the environment
         let experience = env.step(action)?;
-
         total_reward += experience.reward;
 
         if experience.terminal.is_done() {
@@ -100,31 +116,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## 🏗️ Architecture
+## Core abstractions
 
-OGym is built around three core traits that ensure consistency across different physics backends:
+OGym uses three core traits across every backend:
 
-| Trait                  | Description                                                                                                       |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| **`Space`**            | Defines valid bounds for Actions and Observations. Handles sampling, validation, and shape checking.              |
-| **`Environment`**      | The standard interface for single-instance environments. Handles `reset`, `step`, and state management.           |
-| **`BatchEnvironment`** | Interface for vectorized environments that manage multiple instances simultaneously for high-throughput training. |
+| Trait | Responsibility |
+| --- | --- |
+| `Space` | Defines, samples, and validates action and observation bounds. |
+| `Environment` | Provides reset and step semantics for a single environment. |
+| `BatchEnvironment` | Manages multiple environment instances for high-throughput execution. |
 
-## 🌍 Supported Environments
+For a detailed design overview, see the
+[architecture documentation](https://mhyrzt.github.io/ogym/architecture.html).
 
-OGym currently supports the following environment modules:
-
-- **`env/control`**: Classic control benchmarks (e.g., CartPole, Pendulum).
-- **`env/toy_text`**: Discrete environments such as FrozenLake, Taxi, Blackjack, and CliffWalking.
-- **`env/rapier`**: Physics-based environments powered by the [Rapier](https://rapier.rs/) engine.
-- **`env/mujoco`**: High-fidelity physics environments using the MuJoCo engine.
-
-## 🤝 Contributing
-
-We welcome contributions from the community!
-
-- **Bug Reports & Feature Requests**: Please open an issue on GitHub.
-- **Pull Requests**: Feel free to submit PRs for bug fixes or new environments. For major architecture changes, please open an issue first to discuss.
+## Development
 
 Common development workflows are available from the repository root:
 
@@ -137,6 +142,15 @@ just benchmark cartpole
 just benchmark-all
 ```
 
-## 📄 License
+See the [contributor guide](docs/src/contributing.md) for repository structure,
+testing expectations, and pull request guidance.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Contributing
+
+Bug reports, feature requests, and pull requests are welcome. Discuss major
+architecture changes in an issue before implementation and include benchmark
+evidence for performance claims.
+
+## License
+
+OGym is distributed under the [MIT License](LICENSE).

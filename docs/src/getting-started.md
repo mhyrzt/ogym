@@ -26,23 +26,23 @@ ogym = { version = "0.1.0", features = ["mujoco"] }
 
 You must also install the MuJoCo library separately.
 
-### MuJoCo 3.9.0
+### MuJoCo 3.10.0
 
-OGym targets MuJoCo 3.9.0. On Linux x86-64, install the prebuilt archive under
+OGym targets MuJoCo 3.10.0. On Linux x86-64, install the prebuilt archive under
 the default path expected by OGym:
 
 ```sh
 mkdir -p "$HOME/.local/mujoco"
 curl --fail --location \
-  https://github.com/google-deepmind/mujoco/releases/download/3.9.0/mujoco-3.9.0-linux-x86_64.tar.gz \
+  https://github.com/google-deepmind/mujoco/releases/download/3.10.0/mujoco-3.10.0-linux-x86_64.tar.gz \
   | tar -xz --strip-components=1 -C "$HOME/.local/mujoco"
 ```
 
 Official prebuilt packages are also available for
-[Linux AArch64](https://github.com/google-deepmind/mujoco/releases/download/3.9.0/mujoco-3.9.0-linux-aarch64.tar.gz),
-[macOS universal](https://github.com/google-deepmind/mujoco/releases/download/3.9.0/mujoco-3.9.0-macos-universal2.dmg),
+[Linux AArch64](https://github.com/google-deepmind/mujoco/releases/download/3.10.0/mujoco-3.10.0-linux-aarch64.tar.gz),
+[macOS universal](https://github.com/google-deepmind/mujoco/releases/download/3.10.0/mujoco-3.10.0-macos-universal2.dmg),
 and
-[Windows x86-64](https://github.com/google-deepmind/mujoco/releases/download/3.9.0/mujoco-3.9.0-windows-x86_64.zip).
+[Windows x86-64](https://github.com/google-deepmind/mujoco/releases/download/3.10.0/mujoco-3.10.0-windows-x86_64.zip).
 
 > **Note:** If you install MuJoCo elsewhere, set `MUJOCO_DIR` to its root
 > directory and ensure its library directory is available to the dynamic
