@@ -2,9 +2,6 @@
 /target
 **/target
 
-## Generated benchmark results
-/benchmark/results/
-
 ## Generated documentation
 /docs/book/
 

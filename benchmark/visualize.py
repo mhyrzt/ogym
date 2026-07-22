@@ -9,13 +9,14 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import scienceplots  # noqa: F401  Registers the SciencePlots styles.
+from matplotlib.ticker import StrMethodFormatter
 
 
 BENCHMARK_DIR = Path(__file__).resolve().parent
 RESULTS_FILE = BENCHMARK_DIR / "results" / "all_results.json"
 OUTPUT_IMAGE = BENCHMARK_DIR / "results" / "benchmark.png"
 IMPLEMENTATIONS = ("ogym", "gym")
-COLORS = {"ogym": "#D97757", "gym": "#4C78A8"}
+COLORS = {"ogym": "#ff7f0e", "gym": "#1f77b4"}
 LABELS = {"ogym": "ogym (Rust)", "gym": "Gymnasium (Python)"}
 SECONDS_TO_MILLISECONDS = 1_000
 ENVIRONMENT_GROUPS = (
@@ -143,9 +144,9 @@ def group_title(
     average_speedup = math.prod(speedups) ** (1 / len(speedups))
 
     if average_speedup >= 1:
-        comparison = f"ogym {average_speedup:.1f}× faster on average"
+        comparison = f"{average_speedup:.1f}×"
     else:
-        comparison = f"Gymnasium {1 / average_speedup:.1f}× faster on average"
+        comparison = f"{1 / average_speedup:.1f}× Gymnasium"
     return f"{group_name} — {comparison}"
 
 
@@ -155,31 +156,60 @@ def plot_benchmark(
 ) -> None:
     groups = available_groups(environments)
 
-    with plt.style.context(["science", "no-latex"]):
-        fig, axes = plt.subplots(2, 2, figsize=(17, 12.5))
+    with plt.style.context(
+        [
+            "science",
+            "no-latex",
+            {
+                "font.size": 15,
+                "axes.titlesize": 17,
+                "xtick.labelsize": 13,
+                "ytick.labelsize": 15,
+                "legend.fontsize": 15,
+            },
+        ]
+    ):
+        fig, axes = plt.subplot_mosaic(
+            [
+                ["box2d", "mujoco"],
+                ["classic", "mujoco"],
+                ["toy_text", "mujoco"],
+            ],
+            figsize=(17, 12.5),
+            gridspec_kw={"height_ratios": (2, 4, 4)},
+        )
         fig.subplots_adjust(
             left=0.09,
             right=0.985,
             bottom=0.08,
             top=0.90,
             wspace=0.28,
-            hspace=0.26,
+            hspace=0.38,
         )
         fig.suptitle(
             "ogym vs Gymnasium",
             x=0.06,
             y=0.97,
             ha="left",
+            fontsize=25,
+            fontweight="semibold",
+        )
+        fig.supxlabel(
+            "Execution time (milliseconds)",
             fontsize=17,
             fontweight="semibold",
         )
-        fig.supxlabel("Execution time (milliseconds, lower is better)")
-        fig.supylabel("Environment")
 
         legend_handles = []
         bar_height = 0.38
 
-        for ax, (group_name, group_environments) in zip(axes.flat, groups):
+        ordered_axes = (
+            axes["box2d"],
+            axes["mujoco"],
+            axes["classic"],
+            axes["toy_text"],
+        )
+        for ax, (group_name, group_environments) in zip(ordered_axes, groups):
             positions = list(range(len(group_environments)))
 
             if not group_environments:
@@ -235,11 +265,11 @@ def plot_benchmark(
                     ax.annotate(
                         value_label,
                         (mean + error, position),
-                        xytext=(5, 0),
+                        xytext=(6, 0),
                         textcoords="offset points",
                         ha="left",
                         va="center",
-                        fontsize=8 if len(group_environments) > 5 else 9,
+                        fontsize=13,
                     )
                 maximum_value = max(
                     maximum_value,
@@ -258,8 +288,10 @@ def plot_benchmark(
             ax.invert_yaxis()
             ax.set_xlim(0, maximum_value * 1.32)
             ax.margins(y=0.04)
+            ax.xaxis.set_major_formatter(StrMethodFormatter("{x:,.0f}"))
             ax.grid(False)
             ax.tick_params(which="both", top=False, right=False)
+            ax.tick_params(which="minor", bottom=False, left=False)
             ax.xaxis.set_ticks_position("bottom")
             ax.yaxis.set_ticks_position("left")
             ax.spines[["top", "right"]].set_visible(False)
@@ -270,7 +302,7 @@ def plot_benchmark(
             loc="upper right",
             ncols=2,
             frameon=False,
-            bbox_to_anchor=(0.98, 1.0),
+            bbox_to_anchor=(0.98, 0.985),
         )
 
         output_image.parent.mkdir(parents=True, exist_ok=True)
