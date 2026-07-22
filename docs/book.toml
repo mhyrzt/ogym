@@ -1,0 +1,8 @@
+[book]
+title = "ogym Documentation"
+language = "en"
+src = "src"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
