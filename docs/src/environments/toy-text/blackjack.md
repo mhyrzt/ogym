@@ -6,13 +6,13 @@ The `Vec<u32>` state is `[player_sum, dealer_showing, usable_ace]` in `MultiDisc
 
 ## Dynamics and reward
 
-A usable ace contributes 11 when doing so keeps the hand at or below 21. On hit, draw \(c\sim\text{Deck}\), append it, and return reward \(-1\) if the player busts or \(0\) otherwise. On stick, the dealer draws until its sum is at least 17, then
+A usable ace contributes 11 when doing so keeps the hand at or below 21. On hit, draw \\(c\sim\text{Deck}\\), append it, and return reward \\(-1\\) if the player busts or \\(0\\) otherwise. On stick, the dealer draws until its sum is at least 17, then
 
-\[
-r=\operatorname{sign}(\operatorname{score}_{player}-\operatorname{score}_{dealer}).
-\]
+\\[
+r=\operatorname{sign}(\operatorname{score}\_{player}-\operatorname{score}\_{dealer}).
+\\]
 
-With `sab`, a player natural against a non-natural dealer is an outright \(+1\). Otherwise, when `natural` is enabled, a natural that already wins pays \(+1.5\).
+With `sab`, a player natural against a non-natural dealer is an outright \\(+1\\). Otherwise, when `natural` is enabled, a natural that already wins pays \\(+1.5\\).
 
 ## Episode end
 

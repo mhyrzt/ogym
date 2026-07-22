@@ -2,17 +2,17 @@
 
 ## State and action spaces
 
-For an `nrow × ncol` grid, state \(s=r\,n_{col}+c\) belongs to `Discrete(nrow*ncol)`. Actions are `0 = up`, `1 = right`, `2 = down`, and `3 = left`; boundary moves stay in place. Start is bottom-left and goal is bottom-right. The bottom-row cells between them are the cliff.
+For an `nrow × ncol` grid, state \\(s=r\,n_{col}+c\\) belongs to `Discrete(nrow*ncol)`. Actions are `0 = up`, `1 = right`, `2 = down`, and `3 = left`; boundary moves stay in place. Start is bottom-left and goal is bottom-right. The bottom-row cells between them are the cliff.
 
 ## Dynamics and reward
 
-Let \(\delta(a)\) be the selected unit grid displacement. The candidate cell is
+Let \\(\delta(a)\\) be the selected unit grid displacement. The candidate cell is
 
-\[
+\\[
 (r',c')=\operatorname{clip}_{grid}((r,c)+\delta(a)).
-\]
+\\]
 
-Entering the cliff returns to start with reward \(-100\) and does **not** terminate. Every other move rewards \(-1\).
+Entering the cliff returns to start with reward \\(-100\\) and does **not** terminate. Every other move rewards \\(-1\\).
 
 ## Episode end
 

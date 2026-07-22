@@ -2,23 +2,23 @@
 
 ## State and action spaces
 
-The 4-value observation is all `qpos` followed by all `qvel`: cart position, pole angle, cart velocity, and pole angular velocity. The default action is one cart control in \([-3,3]\).
+The 4-value observation is all `qpos` followed by all `qvel`: cart position, pole angle, cart velocity, and pole angular velocity. The default action is one cart control in \\([-3,3]\\).
 
 ## Dynamics and reward
 
-MuJoCo advances the cart-pole for two model steps by default. For observation \(s\),
+MuJoCo advances the cart-pole for two model steps by default. For observation \\(s\\),
 
-\[
+\\[
 \text{terminated}=\neg\operatorname{finite}(s)\ \lor\ |s_1|>0.2,
 \qquad
 r=\begin{cases}0&\text{terminated}\\1&\text{otherwise.}\end{cases}
-\]
+\\]
 
 `Info["reward_survive"]` contains this reward.
 
 ## Episode end
 
-Non-finite state or pole angle beyond \(0.2\) radians terminates. The horizon truncates.
+Non-finite state or pole angle beyond \\(0.2\\) radians terminates. The horizon truncates.
 
 ## Configuration
 

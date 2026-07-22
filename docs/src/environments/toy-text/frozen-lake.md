@@ -2,18 +2,18 @@
 
 ## State and action spaces
 
-State \(s=r\,n_{col}+c\) is row-major. Actions are `0 = left`, `1 = down`, `2 = right`, and `3 = up`. The map uses `S` (start), `F` (frozen), `H` (hole), and `G` (goal).
+State \\(s=r\,n_{col}+c\\) is row-major. Actions are `0 = left`, `1 = down`, `2 = right`, and `3 = up`. The map uses `S` (start), `F` (frozen), `H` (hole), and `G` (goal).
 
 ## Dynamics and reward
 
 Without slipperiness, the requested direction is applied with boundary clipping. With `is_slippery`, the actual direction is uniformly selected from
 
-\[
+\\[
 \{(a-1)\bmod4,\ a,\ (a+1)\bmod4\},
 \qquad P=1/3\text{ each}.
-\]
+\\]
 
-The reward is \(1\) on `G` and \(0\) everywhere else.
+The reward is \\(1\\) on `G` and \\(0\\) everywhere else.
 
 ## Episode end
 

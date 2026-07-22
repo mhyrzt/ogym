@@ -2,18 +2,18 @@
 
 ## State and action spaces
 
-The default 348-value observation concatenates `qpos[2..]`, all `qvel`, non-world body inertias (`cinert`), non-world body spatial velocities (`cvel`), actuator generalized forces after the six root DOFs, and non-world external contact forces. Configuration can retain root x/y or omit any auxiliary group. The default action is 17 controls in \([-0.4,0.4]\).
+The default 348-value observation concatenates `qpos[2..]`, all `qvel`, non-world body inertias (`cinert`), non-world body spatial velocities (`cvel`), actuator generalized forces after the six root DOFs, and non-world external contact forces. Configuration can retain root x/y or omit any auxiliary group. The default action is 17 controls in \\([-0.4,0.4]\\).
 
 ## Dynamics, reward, and info
 
-Horizontal velocity is computed from the mass-weighted body center. With simulator control \(u\) and external forces \(f_c\),
+Horizontal velocity is computed from the mass-weighted body center. With simulator control \\(u\\) and external forces \\(f_c\\),
 
-\[
+\\[
 r=w_fv_x+r_{healthy}-w_u\lVert u\rVert_2^2-
 \operatorname{clip}(w_c\lVert f_c\rVert_2^2,c_{min},c_{max}).
-\]
+\\]
 
-Health is strict root height \(z\in(z_{min},z_{max})\). `Info` exposes xyz position, xy velocity, summed tendon length/velocity, and reward components.
+Health is strict root height \\(z\in(z_{min},z_{max})\\). `Info` exposes xyz position, xy velocity, summed tendon length/velocity, and reward components.
 
 ## Episode end
 

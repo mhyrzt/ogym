@@ -4,34 +4,34 @@
 
 ## State and action spaces
 
-The `SVector<f64, 4>` observation is \([x,\dot x,\theta,\dot\theta]\). Bounds are \(x\in[-2x_{max},2x_{max}]\), \(\theta\in[-2\theta_{max},2\theta_{max}]\), with velocity components represented by \(\pm\texttt{f64::MAX}\).
+The `SVector<f64, 4>` observation is \\([x,\dot x,\theta,\dot\theta]\\). Bounds are \\(x\in[-2x_{max},2x_{max}]\\), \\(\theta\in[-2\theta_{max},2\theta_{max}]\\), with velocity components represented by \\(\pm\texttt{f64::MAX}\\).
 
-- Discrete: `0` applies \(-f\), `1` applies \(+f\).
-- Continuous: \(a\in[-1,1]\) applies \(F=af\); out-of-range values are rejected.
+- Discrete: `0` applies \\(-f\\), `1` applies \\(+f\\).
+- Continuous: \\(a\in[-1,1]\\) applies \\(F=af\\); out-of-range values are rejected.
 
-Reset samples every state component uniformly from \([-0.05,0.05]\).
+Reset samples every state component uniformly from \\([-0.05,0.05]\\).
 
 ## Dynamics and reward
 
-Let \(m=m_c+m_p\), \(p=m_pl\), and
+Let \\(m=m_c+m_p\\), \\(p=m_pl\\), and
 
-\[
+\\[
 T=\frac{F+p\dot\theta^2\sin\theta}{m}.
-\]
+\\]
 
 Then
 
-\[
+\\[
 \ddot\theta=\frac{g\sin\theta-\cos\theta\,T}{l(4/3-m_p\cos^2\theta/m)},
 \qquad
 \ddot x=T-\frac{p\ddot\theta\cos\theta}{m}.
-\]
+\\]
 
-Euler updates positions before velocities; semi-implicit Euler updates velocities first. Both use timestep `tau`. Every accepted step rewards \(+1\), including a terminal step.
+Euler updates positions before velocities; semi-implicit Euler updates velocities first. Both use timestep `tau`. Every accepted step rewards \\(+1\\), including a terminal step.
 
 ## Episode end
 
-Termination occurs when \(|x|>x_{max}\) or \(|\theta|>\theta_{max}\). Truncation occurs at `t_max` steps.
+Termination occurs when \\(|x|>x_{max}\\) or \\(|\theta|>\theta_{max}\\). Truncation occurs at `t_max` steps.
 
 ## Configuration
 

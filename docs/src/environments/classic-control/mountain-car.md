@@ -4,28 +4,28 @@
 
 ## State and action spaces
 
-The state is `SVector<f64, 2>`: \([x,v]\), bounded by `min_x..max_x` and \([-max_v,max_v]\). Reset samples \(x\sim U(-0.6,-0.4)\) and sets \(v=0\).
+The state is `SVector<f64, 2>`: \\([x,v]\\), bounded by `min_x..max_x` and \\([-max_v,max_v]\\). Reset samples \\(x\sim U(-0.6,-0.4)\\) and sets \\(v=0\\).
 
-- Discrete: `0`, `1`, `2` map to direction \(-1,0,+1\).
-- Continuous: one command \(a\in[-1,1]\); out-of-range values are rejected.
+- Discrete: `0`, `1`, `2` map to direction \\(-1,0,+1\\).
+- Continuous: one command \\(a\in[-1,1]\\); out-of-range values are rejected.
 
 ## Dynamics and reward
 
-For mapped force command \(u\),
+For mapped force command \\(u\\),
 
-\[
+\\[
 v_{t+1}=\operatorname{clip}(v_t+f u-g\cos(3x_t),-v_{max},v_{max}),
-\]
+\\]
 
-\[
+\\[
 x_{t+1}=\operatorname{clip}(x_t+v_{t+1},x_{min},x_{max}).
-\]
+\\]
 
-At the left boundary, negative velocity is reset to zero. `Constant` reward is always \(-1\). `ActionPenalty` is \(-0.1u^2\) plus \(+100\) on the terminal transition.
+At the left boundary, negative velocity is reset to zero. `Constant` reward is always \\(-1\\). `ActionPenalty` is \\(-0.1u^2\\) plus \\(+100\\) on the terminal transition.
 
 ## Episode end
 
-Termination requires both \(x\ge x_{goal}\) and \(v\ge v_{goal}\). Truncation occurs at `max_t` steps.
+Termination requires both \\(x\ge x_{goal}\\) and \\(v\ge v_{goal}\\). Truncation occurs at `max_t` steps.
 
 ## Configuration
 

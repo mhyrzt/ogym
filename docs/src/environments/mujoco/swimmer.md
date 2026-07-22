@@ -2,14 +2,14 @@
 
 ## State and action spaces
 
-The default 8-value observation concatenates `qpos[2..]` with all `qvel`, omitting root x/y. Keeping those positions produces 10 values. The default action is two controls in \([-1,1]\).
+The default 8-value observation concatenates `qpos[2..]` with all `qvel`, omitting root x/y. Keeping those positions produces 10 values. The default action is two controls in \\([-1,1]\\).
 
 ## Dynamics and reward
 
-\[
+\\[
 v_x=\frac{x_{t+1}-x_t}{\Delta t},\qquad
 r=w_fv_x-w_u\lVert u\rVert_2^2.
-\]
+\\]
 
 `Info` contains x position and the forward/control reward components.
 

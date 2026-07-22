@@ -6,27 +6,27 @@ The `SVector<f32, 24>` observation contains, in order: hull angle; scaled hull a
 
 ## Action space
 
-The continuous `SVector<f32, 4>` controls left hip, left knee, right hip, and right knee. Values are clipped to \([-1,1]\) when applied. With `control_speed=false`, sign chooses target direction and magnitude scales maximum motor torque. With `control_speed=true`, the value scales target speed while maximum torque stays fixed. There is no discrete mode.
+The continuous `SVector<f32, 4>` controls left hip, left knee, right hip, and right knee. Values are clipped to \\([-1,1]\\) when applied. With `control_speed=false`, sign chooses target direction and magnitude scales maximum motor torque. With `control_speed=true`, the value scales target speed while maximum torque stays fixed. There is no discrete mode.
 
 ## Dynamics and reward
 
-Rapier advances one step with \(\Delta t=1/\text{fps}\). Joint motors and contact constraints enter the shared rigid-body equation from the [backend chapter](../../architecture/backends.md#rapier2d). Define
+Rapier advances one step with \\(\Delta t=1/\text{fps}\\). Joint motors and contact constraints enter the shared rigid-body equation from the [backend chapter](../../architecture/backends.md#rapier2d). Define
 
-\[
+\\[
 H_t=130x_t/\text{scale}-5|\theta_t|.
-\]
+\\]
 
 The ordinary reward is
 
-\[
+\\[
 r_t=H_t-H_{t-1}-0.00035\,\tau_{motor}\sum_i\operatorname{clip}(|a_i|,0,1).
-\]
+\\]
 
-Hull contact or movement behind \(x=0\) overrides it with \(-100\).
+Hull contact or movement behind \\(x=0\\) overrides it with \\(-100\\).
 
 ## Episode end
 
-Termination occurs on hull contact, \(x<0\), or reaching the end of the generated track. Truncation occurs at `max_episode_steps`.
+Termination occurs on hull contact, \\(x<0\\), or reaching the end of the generated track. Truncation occurs at `max_episode_steps`.
 
 ## Configuration
 

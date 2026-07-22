@@ -2,13 +2,13 @@
 
 ## State and action spaces
 
-The default 11-value observation is `qpos[1..]` followed by all velocities clipped to \([-10,10]\); retaining root x adds one value. The default action is 3 controls in \([-1,1]\).
+The default 11-value observation is `qpos[1..]` followed by all velocities clipped to \\([-10,10]\\); retaining root x adds one value. The default action is 3 controls in \\([-1,1]\\).
 
 ## Dynamics and reward
 
-\[
+\\[
 r=w_fv_x+r_{healthy}-w_u\lVert u\rVert_2^2.
-\]
+\\]
 
 Health requires every simulator-state component after the first two positions to lie strictly in `healthy_state_range`, root height in `healthy_z_range`, and torso angle in `healthy_angle_range`. `Info` reports x position/velocity, z displacement from reset, and reward components.
 

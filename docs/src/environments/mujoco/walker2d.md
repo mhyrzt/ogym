@@ -2,13 +2,13 @@
 
 ## State and action spaces
 
-The default 17-value observation is `qpos[1..]` followed by all velocities clipped to \([-10,10]\); retaining root x produces 18 values. The default action is six controls in \([-1,1]\).
+The default 17-value observation is `qpos[1..]` followed by all velocities clipped to \\([-10,10]\\); retaining root x produces 18 values. The default action is six controls in \\([-1,1]\\).
 
 ## Dynamics and reward
 
-\[
+\\[
 r=w_fv_x+r_{healthy}-w_u\lVert u\rVert_2^2.
-\]
+\\]
 
 Health requires root height strictly inside `healthy_z_range` and torso angle strictly inside `healthy_angle_range`. `Info` contains x position/velocity, z displacement from reset, and forward/control/survival components.
 

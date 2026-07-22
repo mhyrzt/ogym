@@ -2,14 +2,14 @@
 
 ## State and action spaces
 
-The default 17-value observation is `qpos[1..]` followed by all `qvel`; retaining root x produces 18 values. The default action is 6 controls in \([-1,1]\).
+The default 17-value observation is `qpos[1..]` followed by all `qvel`; retaining root x produces 18 values. The default action is 6 controls in \\([-1,1]\\).
 
 ## Dynamics, reward, and info
 
-\[
+\\[
 v_x=\frac{x_{t+1}-x_t}{\Delta t},\qquad
 r=w_fv_x-w_u\lVert u\rVert_2^2.
-\]
+\\]
 
 `Info` contains `x_position`, `x_velocity`, `reward_forward`, and `reward_ctrl`. Reset adds uniform position noise and Gaussian velocity noise of configured scale.
 

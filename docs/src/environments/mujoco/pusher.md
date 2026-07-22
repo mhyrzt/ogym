@@ -2,15 +2,15 @@
 
 ## State and action spaces
 
-The 23-value observation is the seven arm joint positions, seven arm velocities, fingertip COM (3), object COM (3), and goal COM (3). Object/goal slide-joint coordinates are deliberately omitted. The default action is seven controls in \([-2,2]\).
+The 23-value observation is the seven arm joint positions, seven arm velocities, fingertip COM (3), object COM (3), and goal COM (3). Object/goal slide-joint coordinates are deliberately omitted. The default action is seven controls in \\([-2,2]\\).
 
 ## Dynamics and reward
 
-For fingertip \(p_f\), object \(p_o\), goal \(p_g\), and control \(u\),
+For fingertip \\(p_f\\), object \\(p_o\\), goal \\(p_g\\), and control \\(u\\),
 
-\[
+\\[
 r=-w_n\lVert p_o-p_f\rVert_2-w_d\lVert p_g-p_o\rVert_2-w_u\lVert u\rVert_2^2.
-\]
+\\]
 
 The three signed components are returned as `reward_near`, `reward_dist`, and `reward_ctrl`. Reset randomizes the object in the configured task region while the goal remains fixed.
 

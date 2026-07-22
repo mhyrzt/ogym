@@ -5,7 +5,7 @@
 | Type | Item | Meaning |
 | --- | --- | --- |
 | `Boxed<D>` | `SVector<f64, D>` | Fixed-size continuous box with elementwise bounds |
-| `Discrete` | `u32` | Integer values \(0,\ldots,n-1\) |
+| `Discrete` | `u32` | Integer values \\(0,\ldots,n-1\\) |
 | `MultiDiscrete` | `Vec<u32>` | Product of discrete ranges |
 | `Mixed<D>` | `MixedItem<D>` | Either a discrete space or a continuous `Boxed<D>` selected at construction |
 

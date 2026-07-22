@@ -2,16 +2,16 @@
 
 ## State and action spaces
 
-The default 348-value observation has the same groups and switches as [Humanoid](humanoid.md): `qpos[2..]`, `qvel`, non-world `cinert`, non-world `cvel`, actuator generalized forces after the root DOFs, and non-world external forces. The default action is 17 controls in \([-0.4,0.4]\).
+The default 348-value observation has the same groups and switches as [Humanoid](humanoid.md): `qpos[2..]`, `qvel`, non-world `cinert`, non-world `cvel`, actuator generalized forces after the root DOFs, and non-world external forces. The default action is 17 controls in \\([-0.4,0.4]\\).
 
 ## Dynamics, reward, and info
 
-Let \(z\) be root height, \(h\) the MuJoCo model timestep, \(u\) the simulator controls, and \(f_c\) external contact forces:
+Let \\(z\\) be root height, \\(h\\) the MuJoCo model timestep, \\(u\\) the simulator controls, and \\(f_c\\) external contact forces:
 
-\[
+\\[
 r=w_h\frac{z}{h}-w_u\lVert u\rVert_2^2-
 \operatorname{clip}(w_i\lVert f_c\rVert_2^2,i_{min},i_{max})+1.
-\]
+\\]
 
 `Info` includes x/y position, distance from origin, summed tendon length/velocity, and upright/control/impact reward components.
 

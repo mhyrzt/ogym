@@ -2,17 +2,17 @@
 
 ## State and action spaces
 
-With defaults, the 105-value observation concatenates `qpos[2..]` (13), all `qvel` (14), and the six external contact-force components for each non-world body (78), clipped to \([-1,1]\). Including root x/y adds two values; disabling contact forces removes 78. The default action has 8 actuator controls in \([-1,1]\).
+With defaults, the 105-value observation concatenates `qpos[2..]` (13), all `qvel` (14), and the six external contact-force components for each non-world body (78), clipped to \\([-1,1]\\). Including root x/y adds two values; disabling contact forces removes 78. The default action has 8 actuator controls in \\([-1,1]\\).
 
 ## Dynamics, reward, and info
 
-For torso displacement over agent timestep \(\Delta t\), \(v_x=(x_{t+1}-x_t)/\Delta t\). With clipped full-model contact-force vector \(f_c\),
+For torso displacement over agent timestep \\(\Delta t\\), \\(v_x=(x_{t+1}-x_t)/\Delta t\\). With clipped full-model contact-force vector \\(f_c\\),
 
-\[
+\\[
 r=w_fv_x+r_{healthy}-w_u\lVert u\rVert_2^2-w_c\lVert f_c\rVert_2^2.
-\]
+\\]
 
-Healthy means every simulator-state value is finite and root height \(z\in[z_{min},z_{max}]\). `Info` reports x/y position and velocity, distance from origin, and forward, control, contact, and survival reward components.
+Healthy means every simulator-state value is finite and root height \\(z\in[z_{min},z_{max}]\\). `Info` reports x/y position and velocity, distance from origin, and forward, control, contact, and survival reward components.
 
 ## Episode end
 
