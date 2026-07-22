@@ -26,6 +26,10 @@ The benchmark recipes automatically use `LD_LIBRARY_PATH` on Linux and
 `DYLD_LIBRARY_PATH` on macOS. MuJoCo defaults to `~/.local/mujoco`; set
 `MUJOCO_DIR` to override that location.
 
+Non-MuJoCo recipes build a default binary with no MuJoCo dependency. The 11
+MuJoCo recipes use a separate feature-enabled binary and native loader path, so
+Classic Control, Toy Text, and Rapier environments run without MuJoCo installed.
+
 ## Run benchmarks
 
 List all recipes with `just`. Run an individual comparison by environment name:

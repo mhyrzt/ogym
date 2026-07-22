@@ -1,5 +1,8 @@
 # Configuration
-rust_bin_path := "target/release/benchmark"
+default_target_dir := "target/default"
+mujoco_target_dir := "target/mujoco"
+default_rust_bin := default_target_dir / "release/benchmark"
+mujoco_rust_bin := mujoco_target_dir / "release/benchmark"
 py_bench := "gym_benchmarks.py"
 results_dir := "results"
 warmup := env('HYPERPARAM_WARMUP', '3')
@@ -9,15 +12,22 @@ home_dir := env('HOME')
 mujoco_dir := env('MUJOCO_DIR', home_dir / ".local/mujoco")
 mujoco_lib_path := mujoco_dir / "lib"
 loader_path_var := if os() == "linux" { "LD_LIBRARY_PATH" } else if os() == "macos" { "DYLD_LIBRARY_PATH" } else { error("MuJoCo benchmarks are unsupported on " + os()) }
-mujoco_loader_env := loader_path_var + "=" + mujoco_lib_path + ":$" + loader_path_var
+inherited_loader_path := env(loader_path_var, '')
+mujoco_loader_path := if inherited_loader_path == "" { mujoco_lib_path } else { mujoco_lib_path + ":" + inherited_loader_path }
+mujoco_loader_env := loader_path_var + "=" + mujoco_loader_path
+mujoco_build_env := "MUJOCO_DIR=" + mujoco_dir + " " + mujoco_loader_env
 
 # Default recipe lists available commands.
 default:
     @just --list
 
-# Build the Rust benchmark binary in release mode.
+# Build the benchmark binary without MuJoCo.
 build:
-    cargo build --release
+    CARGO_TARGET_DIR={{ default_target_dir }} cargo build --release
+
+# Build the feature-enabled MuJoCo benchmark binary separately.
+build-mujoco:
+    {{ mujoco_build_env }} CARGO_TARGET_DIR={{ mujoco_target_dir }} cargo build --release --features mujoco
 
 # Create the results directory.
 prepare:
@@ -29,65 +39,76 @@ clean:
     uv clean
     rm -rf {{ results_dir }}
 
-# Compare one ogym environment with its Gymnasium equivalent.
+# Compare one non-MuJoCo environment without a native loader path.
 [private]
-_compare env label: build prepare
+_compare_default env label: build prepare
     @echo "Benchmarking {{ label }}..."
     hyperfine --warmup {{ warmup }} \
         --export-json "{{ results_dir }}/{{ env }}.json" \
-        --command-name "ogym-{{ label }}" '{{ mujoco_loader_env }} {{ rust_bin_path }} {{ env }}' \
+        --command-name "ogym-{{ label }}" '{{ default_rust_bin }} {{ env }}' \
         --command-name "gym-{{ label }}" 'uv run {{ py_bench }} {{ env }}'
 
-# Individual environment comparisons.
-acrobot: (_compare "acrobot" "acrobot")
-cartpole: (_compare "cartpole" "cartpole")
-mountain-car: (_compare "mountain_car" "mountain-car")
-pendulum: (_compare "pendulum" "pendulum")
-blackjack: (_compare "blackjack" "blackjack")
-cliff-walking: (_compare "cliff_walking" "cliff-walking")
-frozen-lake: (_compare "frozen_lake" "frozen-lake")
-taxi: (_compare "taxi" "taxi")
-bipedal-walker: (_compare "bipedal_walker" "bipedal-walker")
-lunar-lander: (_compare "lunar_lander" "lunar-lander")
-ant: (_compare "ant" "ant")
-half-cheetah: (_compare "half_cheetah" "half-cheetah")
-hopper: (_compare "hopper" "hopper")
-humanoid: (_compare "humanoid" "humanoid")
-humanoid-standup: (_compare "humanoid_standup" "humanoid-standup")
-inverted-double-pendulum: (_compare "inverted_double_pendulum" "inverted-double-pendulum")
-inverted-pendulum: (_compare "inverted_pendulum" "inverted-pendulum")
-pusher: (_compare "pusher" "pusher")
-reacher: (_compare "reacher" "reacher")
-swimmer: (_compare "swimmer" "swimmer")
-walker2d: (_compare "walker2d" "walker2d")
+# Compare one MuJoCo environment using the feature-enabled binary.
+[private]
+_compare_mujoco env label: build-mujoco prepare
+    @echo "Benchmarking {{ label }}..."
+    hyperfine --warmup {{ warmup }} \
+        --export-json "{{ results_dir }}/{{ env }}.json" \
+        --command-name "ogym-{{ label }}" '{{ mujoco_loader_env }} {{ mujoco_rust_bin }} {{ env }}' \
+        --command-name "gym-{{ label }}" 'uv run {{ py_bench }} {{ env }}'
+
+# Non-MuJoCo environment comparisons.
+acrobot: (_compare_default "acrobot" "acrobot")
+cartpole: (_compare_default "cartpole" "cartpole")
+mountain-car: (_compare_default "mountain_car" "mountain-car")
+pendulum: (_compare_default "pendulum" "pendulum")
+blackjack: (_compare_default "blackjack" "blackjack")
+cliff-walking: (_compare_default "cliff_walking" "cliff-walking")
+frozen-lake: (_compare_default "frozen_lake" "frozen-lake")
+taxi: (_compare_default "taxi" "taxi")
+bipedal-walker: (_compare_default "bipedal_walker" "bipedal-walker")
+lunar-lander: (_compare_default "lunar_lander" "lunar-lander")
+
+# MuJoCo environment comparisons.
+ant: (_compare_mujoco "ant" "ant")
+half-cheetah: (_compare_mujoco "half_cheetah" "half-cheetah")
+hopper: (_compare_mujoco "hopper" "hopper")
+humanoid: (_compare_mujoco "humanoid" "humanoid")
+humanoid-standup: (_compare_mujoco "humanoid_standup" "humanoid-standup")
+inverted-double-pendulum: (_compare_mujoco "inverted_double_pendulum" "inverted-double-pendulum")
+inverted-pendulum: (_compare_mujoco "inverted_pendulum" "inverted-pendulum")
+pusher: (_compare_mujoco "pusher" "pusher")
+reacher: (_compare_mujoco "reacher" "reacher")
+swimmer: (_compare_mujoco "swimmer" "swimmer")
+walker2d: (_compare_mujoco "walker2d" "walker2d")
 
 # Run every comparison in one Hyperfine session.
-all: build prepare
+all: build build-mujoco prepare
     #!/usr/bin/env bash
     set -euo pipefail
 
     environments=(
-        "acrobot:acrobot"
-        "cartpole:cartpole"
-        "mountain-car:mountain_car"
-        "pendulum:pendulum"
-        "blackjack:blackjack"
-        "cliff-walking:cliff_walking"
-        "frozen-lake:frozen_lake"
-        "taxi:taxi"
-        "bipedal-walker:bipedal_walker"
-        "lunar-lander:lunar_lander"
-        "ant:ant"
-        "half-cheetah:half_cheetah"
-        "hopper:hopper"
-        "humanoid:humanoid"
-        "humanoid-standup:humanoid_standup"
-        "inverted-double-pendulum:inverted_double_pendulum"
-        "inverted-pendulum:inverted_pendulum"
-        "pusher:pusher"
-        "reacher:reacher"
-        "swimmer:swimmer"
-        "walker2d:walker2d"
+        "acrobot:acrobot:default"
+        "cartpole:cartpole:default"
+        "mountain-car:mountain_car:default"
+        "pendulum:pendulum:default"
+        "blackjack:blackjack:default"
+        "cliff-walking:cliff_walking:default"
+        "frozen-lake:frozen_lake:default"
+        "taxi:taxi:default"
+        "bipedal-walker:bipedal_walker:default"
+        "lunar-lander:lunar_lander:default"
+        "ant:ant:mujoco"
+        "half-cheetah:half_cheetah:mujoco"
+        "hopper:hopper:mujoco"
+        "humanoid:humanoid:mujoco"
+        "humanoid-standup:humanoid_standup:mujoco"
+        "inverted-double-pendulum:inverted_double_pendulum:mujoco"
+        "inverted-pendulum:inverted_pendulum:mujoco"
+        "pusher:pusher:mujoco"
+        "reacher:reacher:mujoco"
+        "swimmer:swimmer:mujoco"
+        "walker2d:walker2d:mujoco"
     )
 
     hyperfine_args=(
@@ -98,8 +119,12 @@ all: build prepare
     )
 
     for spec in "${environments[@]}"; do
-        IFS=: read -r label env <<< "$spec"
-        rust_command='{{ mujoco_loader_env }} {{ rust_bin_path }} '"$env"
+        IFS=: read -r label env backend <<< "$spec"
+        if [[ "$backend" == "mujoco" ]]; then
+            rust_command='{{ mujoco_loader_env }} {{ mujoco_rust_bin }} '"$env"
+        else
+            rust_command='{{ default_rust_bin }} '"$env"
+        fi
         gym_command='uv run {{ py_bench }} '"$env"
         hyperfine_args+=(
             --command-name "ogym-$label" "$rust_command"

@@ -3,8 +3,12 @@ name = "benchmark"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+mujoco = ["ogym/mujoco"]
+
 [dependencies]
-ogym = { path = "../", features = ["mujoco"] }
+ogym = { path = "../", default-features = false }
 nalgebra = "0.33"
 
 [patch.crates-io]
