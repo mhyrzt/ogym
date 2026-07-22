@@ -137,7 +137,15 @@ impl Environment for Blackjack {
                 }
                 terminated = true;
                 reward = cmp(score(&self.player), score(&self.dealer));
-                if self.config.natural && is_natural(&self.player) && reward == 1.0 {
+                if self.config.sab && is_natural(&self.player) && !is_natural(&self.dealer) {
+                    // Player automatically wins; rules consistent with Sutton & Barto.
+                    reward = 1.0;
+                } else if !self.config.sab
+                    && self.config.natural
+                    && is_natural(&self.player)
+                    && reward == 1.0
+                {
+                    // Natural gives extra points, but doesn't autowin (legacy behavior).
                     reward = 1.5;
                 }
             }
@@ -230,5 +238,47 @@ mod tests {
         assert!(is_natural(&[1, 10]));
         assert!(is_natural(&[10, 1]));
         assert!(!is_natural(&[9, 2, 10]));
+    }
+
+    #[test]
+    fn test_sab_natural_pays_one_not_one_point_five() {
+        let mut env = Blackjack::new(BlackjackConfig {
+            natural: true,
+            sab: true,
+        })
+        .unwrap();
+        env.reset(Some(1)).unwrap();
+        env.player = vec![1, 10];
+        env.dealer = vec![9, 6];
+        let exp = env.step(STICK).unwrap();
+        assert_eq!(exp.reward, 1.0);
+    }
+
+    #[test]
+    fn test_sab_disabled_natural_still_pays_one_point_five() {
+        let mut env = Blackjack::new(BlackjackConfig {
+            natural: true,
+            sab: false,
+        })
+        .unwrap();
+        env.reset(Some(1)).unwrap();
+        env.player = vec![1, 10];
+        env.dealer = vec![9, 6];
+        let exp = env.step(STICK).unwrap();
+        assert_eq!(exp.reward, 1.5);
+    }
+
+    #[test]
+    fn test_sab_natural_vs_natural_pushes() {
+        let mut env = Blackjack::new(BlackjackConfig {
+            natural: true,
+            sab: true,
+        })
+        .unwrap();
+        env.reset(Some(1)).unwrap();
+        env.player = vec![1, 10];
+        env.dealer = vec![1, 10];
+        let exp = env.step(STICK).unwrap();
+        assert_eq!(exp.reward, 0.0);
     }
 }
