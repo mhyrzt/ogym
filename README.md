@@ -126,6 +126,17 @@ We welcome contributions from the community!
 - **Bug Reports & Feature Requests**: Please open an issue on GitHub.
 - **Pull Requests**: Feel free to submit PRs for bug fixes or new environments. For major architecture changes, please open an issue first to discuss.
 
+Common development workflows are available from the repository root:
+
+```bash
+just --list
+just validate
+just build-mujoco
+just test-mujoco
+just benchmark cartpole
+just benchmark-all
+```
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

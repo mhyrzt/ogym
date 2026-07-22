@@ -22,6 +22,10 @@ uv sync
 just build
 ```
 
+The benchmark recipes automatically use `LD_LIBRARY_PATH` on Linux and
+`DYLD_LIBRARY_PATH` on macOS. MuJoCo defaults to `~/.local/mujoco`; set
+`MUJOCO_DIR` to override that location.
+
 ## Run benchmarks
 
 List all recipes with `just`. Run an individual comparison by environment name:
@@ -38,6 +42,15 @@ Run the complete suite or the full benchmark-and-plot workflow with:
 ```bash
 just all
 just full
+```
+
+From the repository root, prefix individual recipes with `benchmark`, or use
+the root aliases for complete workflows:
+
+```bash
+just benchmark cartpole
+just benchmark-all
+just benchmark-full
 ```
 
 The Gymnasium side is one argument-driven script. It accepts an environment,
