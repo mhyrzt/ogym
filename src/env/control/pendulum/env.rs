@@ -10,7 +10,6 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 
 const STATE_SIZE: usize = 3;
 const ACTION_SIZE: usize = 1;
-const MAX_SPEED: f64 = 8.0;
 
 type Action = MixedItem<ACTION_SIZE>;
 type ActionSpace = Mixed<ACTION_SIZE>;
@@ -34,8 +33,8 @@ pub struct Pendulum {
 
 impl Pendulum {
     pub fn new(config: PendulumConfig) -> Result<Self, Error> {
-        let hs = SVector::from_vec(vec![1.0, 1.0, MAX_SPEED]);
-        let ha = SVector::from_element(1.0);
+        let hs = SVector::from_vec(vec![1.0, 1.0, config.max_v]);
+        let ha = SVector::from_element(config.max_tau);
 
         Ok(Self {
             space: EnvSpace {
@@ -74,7 +73,7 @@ impl Pendulum {
 
     fn to_state(&self) -> SVector<f64, STATE_SIZE> {
         let (ts, tc) = self.theta.sin_cos();
-        SVector::from_vec(vec![ts, tc, self.omega])
+        SVector::from_vec(vec![tc, ts, self.omega])
     }
 }
 
@@ -96,17 +95,24 @@ impl Environment for Pendulum {
         action: Self::Action,
     ) -> Result<Experience<Self::State, Self::Info, Self::Action>, Error> {
         self.state()?;
-        self.space.action.contains(&action)?;
+        match (&self.space.action, &action) {
+            (Mixed::Discrete(_), MixedItem::Discrete(_))
+            | (Mixed::Continuous(_), MixedItem::Continuous(_)) => {}
+            _ => return Err(crate::spaces::Error::TypeMismatch.into()),
+        }
         if self.is_done()? {
             return Err(Error::EpisodeDone);
         }
 
         let u = match action {
             MixedItem::Discrete(a) => {
+                self.space.action.contains(&action)?;
                 (a as f64) * (2.0 * self.config.max_tau) / (self.config.n as f64 - 1.)
                     - self.config.max_tau
             }
-            MixedItem::Continuous(a) => a[0] * self.config.max_tau,
+            // Gymnasium clips out-of-range torque (np.clip) rather than
+            // rejecting the step outright.
+            MixedItem::Continuous(a) => a[0].clamp(-self.config.max_tau, self.config.max_tau),
         };
         let g = self.config.g;
         let l = self.config.l;
@@ -116,10 +122,9 @@ impl Environment for Pendulum {
         let cost =
             normalize_angle(self.theta).powi(2) + 0.1 * self.omega.powi(2) + 1e-3 * u.powi(2);
 
-        // FIX: Clamp omega to MAX_SPEED (8.0), not max_tau (2.0)
         self.omega = (self.omega
             + dt * (3. * g * self.theta.sin() / (2. * l) + 3. * u / (m * l.powi(2))))
-        .clamp(-MAX_SPEED, MAX_SPEED);
+        .clamp(-self.config.max_v, self.config.max_v);
 
         self.theta += self.omega * dt;
 

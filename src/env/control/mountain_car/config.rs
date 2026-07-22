@@ -82,11 +82,24 @@ impl MountainCarConfig {
 
     pub fn with_discrete_action(mut self) -> Self {
         self.continuous = false;
+        self.f = 1e-3;
+        self.goal_x = 0.5;
+        self.max_t = 200;
+        self.reward = MountainCarReward::Constant;
         self
     }
 
+    /// Switches to `MountainCarContinuous-v0` defaults: Gymnasium's continuous
+    /// variant uses a different `power`, `goal_position`, `max_episode_steps`,
+    /// and reward function than the discrete env, not just a different action
+    /// space. Call this before any other `with_*` overrides so custom values
+    /// aren't clobbered.
     pub fn with_continuous_action(mut self) -> Self {
         self.continuous = true;
+        self.f = 0.0015;
+        self.goal_x = 0.45;
+        self.max_t = 999;
+        self.reward = MountainCarReward::ActionPenalty;
         self
     }
 

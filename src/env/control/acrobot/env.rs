@@ -31,6 +31,7 @@ pub struct Acrobot {
     t: u32,
     raw_state: Option<RawState>,
     pub space: EnvSpace<StateSpace, ActionSpace>,
+    rng: StdRng,
 }
 
 impl Acrobot {
@@ -49,6 +50,7 @@ impl Acrobot {
             space,
             t: 0,
             raw_state: None,
+            rng: StdRng::from_os_rng(),
         })
     }
 
@@ -59,22 +61,25 @@ impl Acrobot {
         }
     }
 
-    fn tau(&self, action: &Action) -> Result<f64, Error> {
+    fn tau(&mut self, action: &Action) -> Result<f64, Error> {
         let mut tau = match (&self.space.action, action) {
             (Mixed::Discrete(space), MixedItem::Discrete(act)) => {
                 space.contains(act).map_err(|_| Error::InvalidAction)?;
                 (*act as i32 - 1) as f64 // Cast to signed int to prevent underflow
             }
             (Mixed::Continuous(space), MixedItem::Continuous(act)) => {
-                space.contains(act).map_err(|_| Error::InvalidAction)?;
-                act[0]
+                // Clip out-of-range torque instead of rejecting the step,
+                // matching Gymnasium's np.clip convention for continuous actions.
+                let (low, high) = space.bounds();
+                act[0].clamp(low[0], high[0])
             }
             _ => return Err(Error::InvalidAction),
         };
 
         // FIX: Ensure range is not empty (0.0..0.0) to prevent panic in rand 0.9+
         if self.config.torque_noise_max > 0.0 {
-            tau += StdRng::from_os_rng()
+            tau += self
+                .rng
                 .random_range(-self.config.torque_noise_max..self.config.torque_noise_max);
         }
         Ok(tau)
@@ -148,13 +153,13 @@ impl Environment for Acrobot {
 
     fn reset(&mut self, seed: Option<u64>) -> Result<(Self::State, Self::Info), Error> {
         self.t = 0;
-        let mut rng = match seed {
+        self.rng = match seed {
             Some(state) => StdRng::seed_from_u64(state),
             None => StdRng::from_rng(&mut rand::rng()),
         };
         let dist = Uniform::new(-0.1, 0.1)?;
         let raw_state: SVector<f64, RAW_STATE_SIZE> =
-            SVector::from_fn(|_, _| dist.sample(&mut rng));
+            SVector::from_fn(|_, _| dist.sample(&mut self.rng));
 
         self.raw_state = Some(raw_state);
         Ok((self.state()?, ()))
@@ -170,7 +175,8 @@ impl Environment for Acrobot {
 
         let curr_state = self.state()?;
 
-        self.raw_state = Some(self.rk4(self.raw()?, self.tau(&action)?));
+        let tau = self.tau(&action)?;
+        self.raw_state = Some(self.rk4(self.raw()?, tau));
         let next_state = self.state()?;
 
         self.t += 1;

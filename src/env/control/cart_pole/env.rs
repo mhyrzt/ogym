@@ -25,15 +25,14 @@ pub struct CartPole {
 
 impl CartPole {
     pub fn new(config: CartPoleConfig) -> Result<Self, Error> {
-        // The formulas for v_max and omega_max are derived based on energy conservation principles.
-        // For a detailed explanation and derivation, see: https://chatgpt.com/share/68387c8f-2298-800e-bfd1-b9af501d3b30
-        let m = config.mc + config.mp;
+        // Matches Gymnasium's CartPoleEnv: velocity and angular velocity are
+        // reported but never bounded by the env itself, so their observation
+        // bounds are effectively unbounded (Gym uses np.finfo(float32).max).
         let high: State = SVector::from_vec(vec![
             config.x_max * 2.0,
-            (2.0 * config.f * config.x_max / m).sqrt(),
+            f64::MAX,
             config.theta_max * 2.0,
-            ((2.0 * config.f * config.theta_max) / (config.l * (FOUR_THIRDS - config.mp / m)))
-                .sqrt(),
+            f64::MAX,
         ]);
 
         let space = EnvSpace {
@@ -149,7 +148,7 @@ impl Environment for CartPole {
 
         Ok(Experience::new(
             curr_state,
-            -1.,
+            1.,
             action,
             next_state,
             (),

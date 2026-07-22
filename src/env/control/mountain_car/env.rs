@@ -45,12 +45,15 @@ impl MountainCar {
         self.t
     }
 
-    pub fn reward(&self, action: &Action) -> f64 {
-        -1.0 - match self.config.reward {
-            MountainCarReward::Constant => 0.0,
+    pub fn reward(&self, action: &Action, terminated: bool) -> f64 {
+        match self.config.reward {
+            MountainCarReward::Constant => -1.0,
             MountainCarReward::ActionPenalty => match action {
-                MixedItem::Discrete(_) => 0.0,
-                MixedItem::Continuous(a) => a.norm_squared(),
+                MixedItem::Discrete(_) => -1.0,
+                MixedItem::Continuous(a) => {
+                    let bonus = if terminated { 100.0 } else { 0.0 };
+                    bonus - 0.1 * a.norm_squared()
+                }
             },
         }
     }
@@ -94,17 +97,18 @@ impl Environment for MountainCar {
         self.space.action.contains(&action)?;
         let curr_state = self.state()?;
         let v: f64 = (curr_state[1] + self.force(&action) * self.config.f
-            - 25e-4 * (3.0 * curr_state[0]).cos())
+            - self.config.g * (3.0 * curr_state[0]).cos())
         .clamp(-self.config.max_v, self.config.max_v);
         let x = (curr_state[0] + v).clamp(self.config.min_x, self.config.max_x);
 
         let next_state = SVector::from_vec(vec![x, self.clamp_velocity_at_boundary(&x, &v)]);
         self.state = Some(next_state);
         self.t += 1;
+        let terminated = self.is_terminal()?;
 
         Ok(Experience::new(
             curr_state,
-            self.reward(&action),
+            self.reward(&action, terminated),
             action,
             next_state,
             None,
@@ -215,7 +219,7 @@ mod tests {
         let config = MountainCarConfig::default().with_constant_reward();
         let env = MountainCar::new(config).unwrap();
         let action = MixedItem::Discrete(1);
-        assert_eq!(env.reward(&action), -1.0);
+        assert_eq!(env.reward(&action, false), -1.0);
     }
 
     #[test]
@@ -224,7 +228,7 @@ mod tests {
         let env = MountainCar::new(config).unwrap();
 
         let action = MixedItem::Discrete(1);
-        assert_eq!(env.reward(&action), -1.0);
+        assert_eq!(env.reward(&action, false), -1.0);
     }
 
     #[test]
@@ -235,7 +239,8 @@ mod tests {
         let env = MountainCar::new(config).unwrap();
 
         let action = MixedItem::Continuous(vec1(0.5));
-        assert_eq!(env.reward(&action), -1.25);
+        assert_eq!(env.reward(&action, false), -0.025);
+        assert_eq!(env.reward(&action, true), 99.975);
     }
 
     #[test]
@@ -499,7 +504,10 @@ mod tests {
         let config = MountainCarConfig::default().with_continuous_action();
 
         assert_eq!(config.continuous, true);
-        assert_eq!(config.f, 1e-3);
+        assert_eq!(config.f, 0.0015);
+        assert_eq!(config.goal_x, 0.45);
+        assert_eq!(config.max_t, 999);
+        assert_eq!(config.reward, MountainCarReward::ActionPenalty);
     }
 
     #[test]
@@ -566,6 +574,7 @@ mod tests {
     #[test]
     fn test_config_builder_pattern() {
         let config = MountainCarConfig::default()
+            .with_continuous_action()
             .with_force(0.01)
             .with_gravity(0.02)
             .with_max_steps(300)
@@ -574,7 +583,6 @@ mod tests {
             .with_max_velocity(0.08)
             .with_goal_position(0.7)
             .with_goal_velocity(0.1)
-            .with_continuous_action()
             .with_action_penalty_reward();
 
         assert_eq!(config.f, 0.01);
